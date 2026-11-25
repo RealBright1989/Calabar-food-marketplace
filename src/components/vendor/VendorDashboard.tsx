@@ -45,6 +45,7 @@ interface VendorDashboardProps {
   currentUid?: string;
   userRole?: string;
   onGoogleSignIn: () => Promise<void>;
+  onSignOut: () => Promise<void>;
   onOpenVendorApply: () => void;
   /** Dev-only local preview: expose every kitchen without an owner UID. */
   previewMode?: boolean;
@@ -64,6 +65,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   currentUid,
   userRole,
   onGoogleSignIn,
+  onSignOut,
   onOpenVendorApply,
   previewMode = false,
 }) => {
@@ -79,7 +81,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   const [dishSection, setDishSection] = useState('Chef Specials');
 
   const accessibleRestaurants = useMemo(() => {
-    if (previewMode || userRole === 'admin') return restaurants;
+    if (previewMode) return restaurants;
     if (userRole === 'vendor' && currentUid) {
       return restaurants.filter((r) => r.ownerUid === currentUid);
     }
@@ -200,22 +202,31 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
     setShowAddDish(false);
   };
 
-  if (!isSignedIn) {
+  if (!isSignedIn || userRole !== 'vendor') {
+    const wrongRole = isSignedIn;
     return (
       <div className="max-w-[720px] mx-auto px-4 md:px-6 py-16">
         <div className="bg-white border border-[#E7E5E4] rounded-[12px] p-8 text-center space-y-4">
           <div className="w-12 h-12 rounded-[10px] bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center mx-auto">
             <Store className="w-6 h-6" />
           </div>
-          <h1 className="text-[24px] font-bold text-[#1C1917]">Vendor portal sign-in required</h1>
+          <h1 className="text-[24px] font-bold text-[#1C1917]">
+            {wrongRole ? 'Vendor account required' : 'Vendor portal sign-in required'}
+          </h1>
           <p className="text-[15px] text-[#78716C] max-w-md mx-auto leading-relaxed">
-            Sign in with your approved vendor account to manage your restaurant menu, incoming
-            orders, and payouts. Each vendor can only access their own kitchen records.
+            {wrongRole
+              ? `You are signed in as ${userRole}. Administrator and customer accounts cannot open the vendor portal. Use the Google account linked to your approved kitchen.`
+              : 'Sign in with your approved vendor Google account to manage your restaurant menu, incoming orders, and payouts. Each vendor can only access their own kitchen records.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <PrimaryButton onClick={() => void onGoogleSignIn()}>
-              Sign in with Google
+              Sign in with Vendor Account
             </PrimaryButton>
+            {wrongRole && (
+              <PrimaryButton variant="outline" onClick={() => void onSignOut()}>
+                Sign out
+              </PrimaryButton>
+            )}
             <PrimaryButton variant="outline" onClick={onOpenVendorApply}>
               Apply to become a vendor
             </PrimaryButton>
@@ -275,7 +286,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           {accessibleRestaurants.length > 1 && (
             <div className="flex items-center gap-2">
               <label htmlFor="vendor-select" className="text-[13px] text-[#78716C] whitespace-nowrap">
-                {userRole === 'admin' ? 'Admin oversight:' : 'Switch kitchen:'}
+                Switch kitchen:
               </label>
               <select
                 id="vendor-select"

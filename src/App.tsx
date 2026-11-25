@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 import { Bell, X } from 'lucide-react';
 import { AdminDashboard } from './components/admin/AdminDashboard';
@@ -237,6 +237,9 @@ export default function App() {
 
   // Modals & notifications
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [authRequiredRole, setAuthRequiredRole] = useState<UserRole | undefined>(undefined);
+  const [portalAuthError, setPortalAuthError] = useState('');
+  const pendingPortalRole = useRef<UserRole | null>(null);
   const [vendorApplyOpen, setVendorApplyOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
   const [activeMealModal, setActiveMealModal] = useState<MenuItem | null>(null);
@@ -367,6 +370,27 @@ export default function App() {
           setSelectedVendorId(profile.vendorRestaurantId);
         }
 
+        // A portal sign-in only succeeds when the verified Firestore role
+        // matches the portal that requested it.
+        if (pendingPortalRole.current) {
+          const requiredRole = pendingPortalRole.current;
+          pendingPortalRole.current = null;
+          setAuthLoading(false);
+
+          if (profile.role !== requiredRole) {
+            setPortalAuthError(
+              `This Google account is registered as ${profile.role}. Please sign in with a ${requiredRole} account to open the ${requiredRole} portal.`,
+            );
+            await signOut(auth);
+            return;
+          }
+
+          setAuthModalOpen(false);
+          setPortalAuthError('');
+          setCurrentView(requiredRole === 'vendor' ? 'vendor-dashboard' : 'admin-dashboard');
+          addToast(`Signed in as ${profile.displayName || profile.email}`);
+        }
+
         if (profile.role === 'admin') {
           await seedMarketplaceIfEmpty(user, false);
         }
@@ -385,6 +409,11 @@ export default function App() {
           onError: handleListenerError,
         });
       } catch (err) {
+        if (pendingPortalRole.current) {
+          pendingPortalRole.current = null;
+          setAuthLoading(false);
+          setPortalAuthError('Could not verify your role. Please try again.');
+        }
         if (isQuotaExceededError(err)) {
           setFirestoreQuotaExceeded(true);
         }
@@ -399,34 +428,32 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    if (previewRole) return;
-    if (!authReady) return;
-    if (currentView === 'admin-dashboard' && effectiveRole !== 'admin') {
-      setCurrentView('home');
-      return;
-    }
-    if (
-      currentView === 'vendor-dashboard' &&
-      effectiveRole !== 'vendor' &&
-      effectiveRole !== 'admin'
-    ) {
-      setCurrentView('home');
-    }
-  }, [authReady, currentView, effectiveRole, previewRole]);
-
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (requiredRole?: UserRole) => {
     setAuthLoading(true);
+    setPortalAuthError('');
+    pendingPortalRole.current = requiredRole ?? null;
     try {
       const cred = await signInWithPopup(auth, googleProvider);
-      setAuthModalOpen(false);
-      addToast(`Signed in as ${cred.user.displayName || cred.user.email}`);
-    } finally {
+      if (!requiredRole) {
+        setAuthModalOpen(false);
+        addToast(`Signed in as ${cred.user.displayName || cred.user.email}`);
+      }
+      // Portal roles are validated in the auth listener after the Firestore
+      // profile resolves. That listener closes the modal and opens the portal.
+    } catch (err) {
+      pendingPortalRole.current = null;
       setAuthLoading(false);
+      setPortalAuthError(
+        err instanceof Error ? err.message : 'Could not complete Google sign-in.',
+      );
+      throw err;
+    } finally {
+      if (!requiredRole) setAuthLoading(false);
     }
   };
 
   const handleSignOut = async () => {
+    pendingPortalRole.current = null;
     setAuthLoading(true);
     try {
       await signOut(auth);
@@ -435,6 +462,25 @@ export default function App() {
       setAuthLoading(false);
     }
   };
+
+  const openCustomerAuth = () => {
+    setAuthRequiredRole(undefined);
+    setPortalAuthError('');
+    setAuthModalOpen(true);
+  };
+
+  const openPortal = (role: 'vendor' | 'admin', view: AppView) => {
+    if (isPreview || effectiveRole === role) {
+      setCurrentView(view);
+      return;
+    }
+    setAuthRequiredRole(role);
+    setPortalAuthError('');
+    setAuthModalOpen(true);
+  };
+
+  const openVendorPortal = () => openPortal('vendor', 'vendor-dashboard');
+  const openAdminPortal = () => openPortal('admin', 'admin-dashboard');
 
   const cartRestaurant = useMemo(() => {
     if (cartItems.length === 0) return null;
@@ -512,7 +558,7 @@ export default function App() {
     if (!cartRestaurant || cartItems.length === 0) return false;
 
     if (!firebaseUser && !isPreview) {
-      setAuthModalOpen(true);
+      openCustomerAuth();
       addToast('Please sign in with Google to place and track your order.', 'warning');
       return false;
     }
@@ -796,7 +842,9 @@ export default function App() {
               : customerProfile.name
         }
         userRole={effectiveRole}
-        onOpenAuth={() => setAuthModalOpen(true)}
+        onOpenAuth={openCustomerAuth}
+        onOpenVendorPortal={openVendorPortal}
+        onOpenAdminPortal={openAdminPortal}
       />
 
       {visibleAnnouncements.length > 0 && (
@@ -844,6 +892,8 @@ export default function App() {
             onSelectMeal={(meal) => setActiveMealModal(meal)}
             onExploreRestaurants={() => setCurrentView('restaurants')}
             onOpenVendorApply={() => setVendorApplyOpen(true)}
+            onOpenVendorPortal={openVendorPortal}
+            onOpenAdminPortal={openAdminPortal}
           />
         )}
 
@@ -894,7 +944,7 @@ export default function App() {
             serviceCharge={settings.serviceChargeFlat}
             paystackMode={settings.paystackMode}
             isSignedIn={effectiveIsSignedIn}
-            onOpenAuth={() => setAuthModalOpen(true)}
+            onOpenAuth={openCustomerAuth}
             onBackToMenu={() => {
               if (cartRestaurant) {
                 setSelectedRestaurantId(cartRestaurant.id);
@@ -957,7 +1007,8 @@ export default function App() {
             isSignedIn={effectiveIsSignedIn}
             currentUid={firebaseUser?.uid}
             userRole={effectiveRole}
-            onGoogleSignIn={handleGoogleSignIn}
+            onGoogleSignIn={() => handleGoogleSignIn('vendor')}
+            onSignOut={handleSignOut}
             onOpenVendorApply={() => setVendorApplyOpen(true)}
             previewMode={isPreview}
           />
@@ -971,7 +1022,7 @@ export default function App() {
             userName={isPreview ? 'Preview Account' : customerProfile.name}
             userRole={effectiveRole}
             authLoading={authLoading && !isPreview}
-            onGoogleSignIn={handleGoogleSignIn}
+            onGoogleSignIn={() => handleGoogleSignIn('admin')}
             onSignOut={
               isPreview
                 ? async () => {
@@ -1440,6 +1491,8 @@ export default function App() {
       <Footer
         onNavigate={setCurrentView}
         onOpenVendorApply={() => setVendorApplyOpen(true)}
+        onOpenVendorPortal={openVendorPortal}
+        onOpenAdminPortal={openAdminPortal}
         onShowInfoToast={(msg) => addToast(msg, 'info')}
       />
 
@@ -1501,7 +1554,9 @@ export default function App() {
         userName={customerProfile.name}
         userRole={userRole}
         authLoading={authLoading}
-        onGoogleSignIn={handleGoogleSignIn}
+        requiredRole={authRequiredRole}
+        authError={portalAuthError}
+        onGoogleSignIn={() => handleGoogleSignIn(authRequiredRole)}
         onSignOut={handleSignOut}
       />
 
@@ -1531,7 +1586,7 @@ export default function App() {
           }
           if (!firebaseUser) {
             setVendorApplyOpen(false);
-            setAuthModalOpen(true);
+            openCustomerAuth();
             addToast('Please sign in with Google first to submit your kitchen application.', 'warning');
             return;
           }

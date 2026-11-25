@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, MapPin, ShieldCheck, Store } from 'lucide-react';
 import {
   CALABAR_NEIGHBOURHOODS,
   FOOD_CATEGORIES,
@@ -22,6 +22,8 @@ interface HomePageProps {
   onSelectMeal: (meal: MenuItem) => void;
   onExploreRestaurants: () => void;
   onOpenVendorApply: () => void;
+  onOpenVendorPortal: () => void;
+  onOpenAdminPortal: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -37,6 +39,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   onSelectMeal,
   onExploreRestaurants,
   onOpenVendorApply,
+  onOpenVendorPortal,
+  onOpenAdminPortal,
 }) => {
   const activeRestaurants = restaurants.filter((r) => r.status === 'Active');
   const featuredRestaurants = [...activeRestaurants]
@@ -122,37 +126,51 @@ export const HomePage: React.FC<HomePageProps> = ({
         </div>
       </section>
 
-      {/* Local development portal previews */}
-      {import.meta.env.DEV && (
-        <section className="max-w-[1200px] mx-auto px-4 md:px-6 lg:px-10 pt-6">
-          <div className="bg-white border border-[#E7E5E4] rounded-[12px] p-5 md:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-[#EA580C]">
-                Local development only
-              </p>
-              <h2 className="text-[16px] font-semibold text-[#1C1917] mt-1">Portal previews</h2>
-              <p className="text-[13px] text-[#78716C] mt-1 leading-relaxed">
-                Open the vendor or admin portal without signing in. Actions are simulated in this
-                browser and are not saved to Firebase.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              <a
-                href="?preview=vendor#vendor-dashboard"
-                className="inline-flex items-center justify-center h-10 px-4 rounded-[8px] bg-white border border-[#E7E5E4] text-[13px] font-semibold text-[#1C1917] hover:bg-[#FAFAF9] hover:border-[#1C1917]/40 transition-colors cursor-pointer"
-              >
-                Vendor portal
-              </a>
-              <a
-                href="?preview=admin#admin-dashboard"
-                className="inline-flex items-center justify-center h-10 px-4 rounded-[8px] bg-white border border-[#E7E5E4] text-[13px] font-semibold text-[#1C1917] hover:bg-[#FAFAF9] hover:border-[#1C1917]/40 transition-colors cursor-pointer"
-              >
-                Admin portal
-              </a>
-            </div>
+      {/* Separate portal sign-ins */}
+      <section className="max-w-[1200px] mx-auto px-4 md:px-6 lg:px-10 pt-6">
+        <div className="bg-white border border-[#E7E5E4] rounded-[12px] p-5 md:p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+          <div>
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[#EA580C]">
+              Partner &amp; operations access
+            </p>
+            <h2 className="text-[16px] font-semibold text-[#1C1917] mt-1">
+              Separate portal sign-ins
+            </h2>
+            <p className="text-[13px] text-[#78716C] mt-1 leading-relaxed max-w-2xl">
+              Vendor and administrator portals use different verified Google accounts. Each sign-in
+              only opens its own dashboard, so marketplace-wide tools never appear in a vendor
+              account.
+            </p>
+            {import.meta.env.DEV && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#78716C]">
+                <span>Local previews:</span>
+                <a
+                  href="?preview=vendor#vendor-dashboard"
+                  className="font-semibold text-[#EA580C] underline underline-offset-2 hover:text-[#C2410C]"
+                >
+                  Vendor
+                </a>
+                <a
+                  href="?preview=admin#admin-dashboard"
+                  className="font-semibold text-[#EA580C] underline underline-offset-2 hover:text-[#C2410C]"
+                >
+                  Admin
+                </a>
+              </div>
+            )}
           </div>
-        </section>
-      )}
+          <div className="flex flex-wrap gap-2.5">
+            <PrimaryButton variant="outline" onClick={onOpenVendorPortal}>
+              <Store className="w-4 h-4" aria-hidden="true" />
+              Vendor sign in
+            </PrimaryButton>
+            <PrimaryButton variant="outline" onClick={onOpenAdminPortal}>
+              <ShieldCheck className="w-4 h-4" aria-hidden="true" />
+              Admin sign in
+            </PrimaryButton>
+          </div>
+        </div>
+      </section>
 
       {/* 2. Food Categories */}
       <section className="max-w-[1200px] mx-auto px-4 md:px-6 lg:px-10 py-12">

@@ -4,12 +4,16 @@ import { AppView } from '../../types/marketplace';
 interface FooterProps {
   onNavigate: (view: AppView) => void;
   onOpenVendorApply: () => void;
+  onOpenVendorPortal: () => void;
+  onOpenAdminPortal: () => void;
   onShowInfoToast: (msg: string) => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({
   onNavigate,
   onOpenVendorApply,
+  onOpenVendorPortal,
+  onOpenAdminPortal,
   onShowInfoToast,
 }) => {
   return (
@@ -74,19 +78,19 @@ export const Footer: React.FC<FooterProps> = ({
               <li>
                 <button
                   type="button"
-                  onClick={() => onNavigate('vendor-dashboard')}
+                  onClick={onOpenVendorPortal}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Vendor dashboard
+                  Vendor portal sign in
                 </button>
               </li>
               <li>
                 <button
                   type="button"
-                  onClick={() => onNavigate('admin-dashboard')}
+                  onClick={onOpenAdminPortal}
                   className="hover:text-white transition-colors cursor-pointer"
                 >
-                  Marketplace admin
+                  Admin portal sign in
                 </button>
               </li>
             </ul>

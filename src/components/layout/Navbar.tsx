@@ -11,6 +11,14 @@ interface NavbarProps {
   customerName: string;
   userRole?: string;
   onOpenAuth: () => void;
+  onOpenVendorPortal: () => void;
+  onOpenAdminPortal: () => void;
+}
+
+interface NavLink {
+  label: string;
+  view: AppView;
+  onSelect?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -22,29 +30,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   customerName,
   userRole,
   onOpenAuth,
+  onOpenVendorPortal,
+  onOpenAdminPortal,
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navLinks: { label: string; view: AppView }[] = [
+  const navLinks: NavLink[] = [
     { label: 'Home', view: 'home' },
     { label: 'Restaurants', view: 'restaurants' },
     { label: 'Track Order', view: 'order-tracking' },
-    ...(userRole === 'vendor' || userRole === 'admin'
-      ? ([{ label: 'Vendor Portal', view: 'vendor-dashboard' }] as {
-          label: string;
-          view: AppView;
-        }[])
+    ...(userRole === 'vendor'
+      ? [{ label: 'Vendor Portal', view: 'vendor-dashboard' as AppView, onSelect: onOpenVendorPortal }]
       : []),
     ...(userRole === 'admin'
-      ? ([{ label: 'Admin', view: 'admin-dashboard' }] as {
-          label: string;
-          view: AppView;
-        }[])
+      ? [{ label: 'Admin', view: 'admin-dashboard' as AppView, onSelect: onOpenAdminPortal }]
       : []),
   ];
 
-  const handleNav = (view: AppView) => {
-    onNavigate(view);
+  const handleNav = (link: NavLink) => {
+    if (link.onSelect) link.onSelect();
+    else onNavigate(link.view);
     setMobileOpen(false);
   };
 
@@ -54,7 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Zone 1: Single-line Brand Wordmark */}
         <button
           type="button"
-          onClick={() => handleNav('home')}
+          onClick={() => handleNav({ label: 'Home', view: 'home' })}
           className="text-[16px] sm:text-[18px] font-bold tracking-tight text-[#1C1917] hover:text-[#EA580C] transition-colors whitespace-nowrap shrink-0 cursor-pointer font-display truncate max-w-[205px] sm:max-w-none"
         >
           Calabar Food Marketplace
@@ -73,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 key={item.view}
                 type="button"
-                onClick={() => handleNav(item.view)}
+                onClick={() => handleNav(item)}
                 className={`py-1 border-b-2 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   isActive
                     ? 'text-[#EA580C] border-[#EA580C] font-semibold'
@@ -90,7 +95,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
-            onClick={() => (isLoggedIn ? handleNav('account') : onOpenAuth())}
+            onClick={() =>
+              isLoggedIn ? handleNav({ label: 'Account', view: 'account' }) : onOpenAuth()
+            }
             className="hidden sm:inline-flex items-center gap-1.5 h-10 px-3 rounded-[8px] text-[14px] font-medium text-[#1C1917] hover:bg-[#F5F5F4] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <User className="w-4 h-4 text-[#78716C]" aria-hidden="true" />
@@ -138,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   key={item.view}
                   type="button"
-                  onClick={() => handleNav(item.view)}
+                  onClick={() => handleNav(item)}
                   className={`text-left px-3 py-2.5 rounded-[8px] text-[15px] font-medium cursor-pointer ${
                     isActive
                       ? 'bg-[#FFF7ED] text-[#EA580C] font-semibold'
@@ -154,7 +161,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => {
                 setMobileOpen(false);
                 if (isLoggedIn) {
-                  handleNav('account');
+                  handleNav({ label: 'Account', view: 'account' });
                 } else {
                   onOpenAuth();
                 }

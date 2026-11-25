@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { CALABAR_NEIGHBOURHOODS } from '../../data/calabarData';
+import { UserRole } from '../../types/marketplace';
 import { InputField, PrimaryButton } from '../ui/Primitives';
 
 /* Auth Modal (Firebase Google Sign-In & Role Status) */
@@ -12,6 +13,9 @@ interface AuthModalProps {
   userName?: string;
   userRole?: string;
   authLoading?: boolean;
+  /** When set, only this role is allowed through this sign-in flow. */
+  requiredRole?: UserRole;
+  authError?: string;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
 }
@@ -24,12 +28,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   userName,
   userRole,
   authLoading = false,
+  requiredRole,
+  authError = '',
   onGoogleSignIn,
   onSignOut,
 }) => {
   const [error, setError] = useState('');
 
   if (!open) return null;
+
+  const portalCopy =
+    requiredRole === 'vendor'
+      ? {
+          title: 'Vendor portal sign-in',
+          description:
+            'Use the Google account linked to your approved Calabar kitchen. Vendor accounts can only manage their own restaurant.',
+          button: 'Sign in with Vendor Account',
+        }
+      : requiredRole === 'admin'
+        ? {
+            title: 'Administrator portal sign-in',
+            description:
+              'Use a verified administrator Google account. Admin access includes marketplace-wide controls that are not available in the vendor portal.',
+            button: 'Sign in with Admin Account',
+          }
+        : {
+            title: isSignedIn ? 'Your account & role' : 'Sign in to Calabar Food Marketplace',
+            description:
+              'Sign in with Google to place orders, track deliveries, and apply as a Calabar vendor.',
+            button: 'Continue with Google',
+          };
+
+  const displayedError = authError || error;
+  const roleMismatch = Boolean(
+    isSignedIn && requiredRole && userRole && userRole !== requiredRole,
+  );
 
   const handleGoogleClick = async () => {
     setError('');
@@ -54,7 +87,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="w-full max-w-md bg-white rounded-[12px] border border-[#E7E5E4] shadow-xl p-6">
         <div className="flex items-center justify-between mb-3">
           <h2 id="auth-modal-title" className="text-[20px] font-bold text-[#1C1917]">
-            {isSignedIn ? 'Your account & role' : 'Sign in to Calabar Food Marketplace'}
+            {portalCopy.title}
           </h2>
           <button
             type="button"
@@ -65,6 +98,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {roleMismatch && (
+          <div className="mb-4 p-3 rounded-[8px] bg-red-50 border border-red-200 text-[13px] text-[#991B1B] leading-relaxed">
+            This account is registered as <strong className="capitalize">{userRole}</strong>. Sign
+            out and use your <strong className="capitalize">{requiredRole}</strong> Google account
+            to open this portal.
+          </div>
+        )}
+
+        {displayedError && (
+          <p className="mb-4 text-[13px] text-[#DC2626] leading-relaxed">{displayedError}</p>
+        )}
 
         {isSignedIn ? (
           <div className="space-y-4">
@@ -79,6 +124,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               Your orders, vendor applications, and dashboard permissions are synced securely with
               Firestore based on your verified role.
             </p>
+            {roleMismatch && (
+              <PrimaryButton fullWidth loading={authLoading} onClick={() => void handleGoogleClick()}>
+                {portalCopy.button}
+              </PrimaryButton>
+            )}
             <div className="flex items-center justify-end gap-3 pt-2">
               <PrimaryButton variant="outline" onClick={onClose}>
                 Close
@@ -88,7 +138,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 loading={authLoading}
                 onClick={async () => {
                   await onSignOut();
-                  onClose();
+                  if (!requiredRole) onClose();
                 }}
               >
                 Sign out
@@ -97,12 +147,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-[14px] text-[#78716C] leading-relaxed">
-              Sign in with Google to place orders, track deliveries, apply as a Calabar vendor, or
-              access your Vendor or Admin portal.
-            </p>
-
-            {error && <p className="text-[13px] text-[#DC2626]">{error}</p>}
+            <p className="text-[14px] text-[#78716C] leading-relaxed">{portalCopy.description}</p>
 
             <PrimaryButton
               fullWidth
@@ -110,7 +155,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               loading={authLoading}
               onClick={handleGoogleClick}
             >
-              Continue with Google
+              {portalCopy.button}
             </PrimaryButton>
           </div>
         )}
