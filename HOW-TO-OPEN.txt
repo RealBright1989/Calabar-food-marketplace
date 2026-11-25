@@ -1,0 +1,52 @@
+CALABAR FOOD MARKETPLACE - OPEN / CLOSE / CONTINUE
+=================================================
+
+PROJECT FOLDER
+  C:\Users\brigh\Downloads\calabar-food-marketplace
+
+
+1. TO OPEN THE APP
+  - Double-click "Calabar Food Marketplace" on the Desktop
+    OR double-click "Start Calabar App.bat" in the project folder.
+  - It starts the server if needed and opens Chrome at http://localhost:3000/
+  - Keep the black window titled "Calabar Food Marketplace - Server" open
+    while you are using the app.
+
+  Test links (dev preview, actions are simulated locally):
+    Customer: http://localhost:3000/?preview=customer#home
+    Vendor:   http://localhost:3000/?preview=vendor#vendor-dashboard
+    Admin:    http://localhost:3000/?preview=admin#admin-dashboard
+
+
+2. TO CLOSE THE APP
+  - Close the Chrome tab/window.
+  - Close the "Calabar Food Marketplace - Server" window
+    (or press Ctrl+C inside that window) to stop the server.
+  - Your code and changes are saved on disk. Nothing is lost.
+
+
+3. TO CONTINUE FROM WHERE YOU STOPPED IN OPENCODE
+
+  Command Prompt:
+    cd /d C:\Users\brigh\Downloads\calabar-food-marketplace
+    opencode -c
+
+  PowerShell (use opencode.cmd; scripts are blocked here):
+    cd 'C:\Users\brigh\Downloads\calabar-food-marketplace'
+    opencode.cmd -c
+
+    Note: "cd /d" is Command Prompt only. In PowerShell just use cd 'path'.
+
+  - "-c" continues the last session in this folder.
+  - If you are ALREADY inside OpenCode, do not type cd or opencode -c there.
+    Use /sessions, or press Ctrl+X then L, and pick the session.
+  - Plain "opencode.cmd" (without -c) starts a NEW session.
+  - "opencode session list" shows your sessions.
+  - "opencode -s <session-id>" continues a specific session.
+  - Inside OpenCode: "/sessions" or Ctrl+X then L picks a session.
+
+
+NOTES
+  - Preview changes are local only and reset when you refresh the page.
+  - Real Google sign-in needs "localhost" added to Firebase
+    Authentication -> Settings -> Authorized domains.

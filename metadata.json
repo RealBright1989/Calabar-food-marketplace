@@ -1,0 +1,6 @@
+{
+  "name": "Calabar Food Marketplace",
+  "description": "Discover delicious meals from local restaurants and food vendors across Calabar, delivered right to your door.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

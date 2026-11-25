@@ -1,0 +1,766 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Boot-time connectivity probe
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Shared Hardened Primitives
+    // -------------------------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isRootAdmin() {
+      return isVerified() && request.auth.token.email == 'brightokon444@gmail.com';
+    }
+
+    function isAdmin() {
+      return isRootAdmin() || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidStr(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isNonNegNum(val) {
+      return (val is int || val is float) && val >= 0;
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints (Anti-Update-Gap)
+    // -------------------------------------------------------------------------
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'name', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'name', 'createdAt'])
+        && isValidId(data.uid)
+        && isValidStr(data.email, 3, 180)
+        && isValidStr(data.name, 1, 120)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidUserSummary(data) {
+      return data.keys().hasAll([
+          'uid', 'displayName', 'role', 'accountStatus', 'neighbourhood',
+          'totalOrders', 'totalSpent', 'joinedAt', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'displayName', 'role', 'accountStatus', 'neighbourhood',
+          'vendorRestaurantId', 'totalOrders', 'totalSpent', 'joinedAt',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && isValidStr(data.displayName, 1, 120)
+        && data.role in ['customer', 'vendor', 'admin']
+        && data.accountStatus in ['Active', 'Suspended']
+        && isValidStr(data.neighbourhood, 1, 80)
+        && (!('vendorRestaurantId' in data) || isValidStr(data.vendorRestaurantId, 0, 128))
+        && data.totalOrders is int && data.totalOrders >= 0
+        && isNonNegNum(data.totalSpent)
+        && isValidStr(data.joinedAt, 4, 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'phone', 'savedAddresses', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'phone', 'savedAddresses', 'notificationPreferences', 'updatedAt'])
+        && isValidId(data.uid)
+        && isValidStr(data.email, 3, 180)
+        && isValidStr(data.phone, 0, 40)
+        && data.savedAddresses is list && data.savedAddresses.size() <= 10
+        && (!('notificationPreferences' in data) || (
+          data.notificationPreferences is map
+          && data.notificationPreferences.keys().hasOnly(['smsOrderAlerts', 'emailReceipts'])
+          && data.notificationPreferences.smsOrderAlerts is bool
+          && data.notificationPreferences.emailReceipts is bool
+        ))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidRestaurant(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'cuisine', 'categories', 'restaurantCategories',
+          'priceTier', 'averageMealPrice', 'neighbourhood', 'address',
+          'description', 'coverImage', 'logoText', 'deliveryTimeMin',
+          'deliveryTimeMax', 'deliveryFee', 'minimumOrder', 'openingHours',
+          'isOpen', 'status', 'reviewCount', 'popularityScore', 'ownerUid',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'cuisine', 'categories', 'restaurantCategories',
+          'priceTier', 'averageMealPrice', 'neighbourhood', 'address',
+          'description', 'coverImage', 'logoText', 'deliveryTimeMin',
+          'deliveryTimeMax', 'deliveryFee', 'minimumOrder', 'openingHours',
+          'isOpen', 'status', 'rating', 'reviewCount', 'popularityScore',
+          'ownerUid', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.name, 2, 140)
+        && isValidStr(data.cuisine, 2, 140)
+        && data.categories is list && data.categories.size() >= 1 && data.categories.size() <= 12
+        && data.categories[0] is string
+        && data.restaurantCategories is list && data.restaurantCategories.size() >= 1 && data.restaurantCategories.size() <= 10
+        && data.restaurantCategories[0] is string
+        && data.priceTier in ['₦', '₦₦', '₦₦₦']
+        && isNonNegNum(data.averageMealPrice)
+        && isValidStr(data.neighbourhood, 2, 80)
+        && isValidStr(data.address, 2, 240)
+        && isValidStr(data.description, 2, 600)
+        && isValidStr(data.coverImage, 1, 400)
+        && isValidStr(data.logoText, 1, 6)
+        && data.deliveryTimeMin is int && data.deliveryTimeMin >= 5 && data.deliveryTimeMin <= 180
+        && data.deliveryTimeMax is int && data.deliveryTimeMax >= data.deliveryTimeMin && data.deliveryTimeMax <= 240
+        && isNonNegNum(data.deliveryFee)
+        && isNonNegNum(data.minimumOrder)
+        && isValidStr(data.openingHours, 2, 80)
+        && data.isOpen is bool
+        && data.status in ['Active', 'Suspended']
+        && (!('rating' in data) || data.rating == null || ((data.rating is int || data.rating is float) && data.rating >= 0 && data.rating <= 5))
+        && data.reviewCount is int && data.reviewCount >= 0
+        && data.popularityScore is int && data.popularityScore >= 0
+        && isValidStr(data.ownerUid, 1, 128)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMenuItem(data) {
+      return data.keys().hasAll([
+          'id', 'restaurantId', 'ownerUid', 'name', 'description', 'category',
+          'menuSection', 'price', 'image', 'available', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'restaurantId', 'ownerUid', 'name', 'description', 'category',
+          'menuSection', 'price', 'image', 'available', 'popular',
+          'sizes', 'extras', 'toppings', 'spiceLevels', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.restaurantId)
+        && isValidStr(data.ownerUid, 1, 128)
+        && isValidStr(data.name, 2, 140)
+        && isValidStr(data.description, 2, 500)
+        && isValidStr(data.category, 2, 40)
+        && isValidStr(data.menuSection, 1, 80)
+        && isNonNegNum(data.price)
+        && isValidStr(data.image, 1, 400)
+        && data.available is bool
+        && (!('popular' in data) || data.popular is bool)
+        && (!('sizes' in data) || (data.sizes is list && data.sizes.size() <= 10))
+        && (!('extras' in data) || (data.extras is list && data.extras.size() <= 15))
+        && (!('toppings' in data) || (data.toppings is list && data.toppings.size() <= 15))
+        && (!('spiceLevels' in data) || (data.spiceLevels is list && data.spiceLevels.size() <= 8))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFoodCategory(data) {
+      return data.keys().hasAll(['id', 'label', 'subtitle', 'image', 'isActive', 'sortOrder', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'label', 'subtitle', 'image', 'isActive', 'sortOrder', 'createdAt', 'updatedAt'])
+        && isValidStr(data.id, 1, 64)
+        && isValidStr(data.label, 1, 60)
+        && isValidStr(data.subtitle, 1, 160)
+        && isValidStr(data.image, 1, 400)
+        && data.isActive is bool
+        && data.sortOrder is int && data.sortOrder >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll([
+          'id', 'orderNumber', 'customerId', 'customerName', 'customerPhone',
+          'deliveryAddress', 'neighbourhood', 'restaurantId', 'restaurantOwnerUid',
+          'restaurantName', 'restaurantPhone', 'items', 'subtotal', 'deliveryFee',
+          'serviceCharge', 'total', 'status', 'paymentStatus', 'placedAt',
+          'estimatedDelivery', 'paymentMethod', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderNumber', 'customerId', 'customerName', 'customerPhone',
+          'deliveryAddress', 'neighbourhood', 'deliveryInstructions', 'restaurantId',
+          'restaurantOwnerUid', 'restaurantName', 'restaurantAddress',
+          'restaurantPhone', 'items', 'subtotal', 'deliveryFee', 'serviceCharge',
+          'total', 'status', 'paymentStatus', 'placedAt', 'estimatedDelivery',
+          'paymentMethod', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.orderNumber, 3, 40)
+        && isValidStr(data.customerId, 1, 128)
+        && isValidStr(data.customerName, 1, 120)
+        && isValidStr(data.customerPhone, 5, 40)
+        && isValidStr(data.deliveryAddress, 3, 240)
+        && isValidStr(data.neighbourhood, 2, 80)
+        && (!('deliveryInstructions' in data) || isValidStr(data.deliveryInstructions, 0, 300))
+        && isValidId(data.restaurantId)
+        && isValidStr(data.restaurantOwnerUid, 1, 128)
+        && isValidStr(data.restaurantName, 2, 140)
+        && (!('restaurantAddress' in data) || isValidStr(data.restaurantAddress, 0, 240))
+        && isValidStr(data.restaurantPhone, 5, 40)
+        && data.items is list && data.items.size() >= 1 && data.items.size() <= 50
+        && isNonNegNum(data.subtotal)
+        && isNonNegNum(data.deliveryFee)
+        && isNonNegNum(data.serviceCharge)
+        && isNonNegNum(data.total)
+        && data.status in [
+          'Order placed', 'Payment confirmed', 'Vendor accepted',
+          'Preparing your food', 'Ready for delivery', 'Out for delivery',
+          'Delivered', 'Cancelled'
+        ]
+        && data.paymentStatus in ['Paid', 'Pending', 'Refunded']
+        && isValidStr(data.placedAt, 8, 60)
+        && isValidStr(data.estimatedDelivery, 2, 60)
+        && isValidStr(data.paymentMethod, 2, 40)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+          'id', 'orderId', 'orderNumber', 'restaurantId', 'restaurantOwnerUid',
+          'restaurantName', 'customerId', 'customerName', 'reference', 'gateway',
+          'type', 'grossAmount', 'subtotalAmount', 'commissionRatePercent',
+          'commissionAmount', 'vendorPayout', 'serviceCharge',
+          'verificationStatus', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderId', 'orderNumber', 'restaurantId', 'restaurantOwnerUid',
+          'restaurantName', 'customerId', 'customerName', 'reference', 'gateway',
+          'type', 'grossAmount', 'subtotalAmount', 'commissionRatePercent',
+          'commissionAmount', 'vendorPayout', 'serviceCharge',
+          'verificationStatus', 'verifiedByUid', 'verifiedAt', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.orderId)
+        && isValidStr(data.orderNumber, 3, 40)
+        && isValidId(data.restaurantId)
+        && isValidStr(data.restaurantOwnerUid, 1, 128)
+        && isValidStr(data.restaurantName, 2, 140)
+        && isValidStr(data.customerId, 1, 128)
+        && isValidStr(data.customerName, 1, 120)
+        && isValidStr(data.reference, 4, 80)
+        && isValidStr(data.gateway, 2, 40)
+        && data.type in ['Charge', 'Refund']
+        && isNonNegNum(data.grossAmount)
+        && isNonNegNum(data.subtotalAmount)
+        && isNonNegNum(data.commissionRatePercent)
+        && isNonNegNum(data.commissionAmount)
+        && isNonNegNum(data.vendorPayout)
+        && isNonNegNum(data.serviceCharge)
+        && data.verificationStatus in ['Pending Verification', 'Verified', 'Refunded']
+        && (!('verifiedByUid' in data) || isValidStr(data.verifiedByUid, 1, 128))
+        && (!('verifiedAt' in data) || isValidStr(data.verifiedAt, 8, 60))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidVendorApplication(data) {
+      return data.keys().hasAll([
+          'id', 'applicantUid', 'businessName', 'ownerName', 'email', 'phone',
+          'neighbourhood', 'cuisine', 'submittedAt', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'applicantUid', 'businessName', 'ownerName', 'email', 'phone',
+          'neighbourhood', 'cuisine', 'submittedAt', 'status', 'reviewNote',
+          'reviewedByUid', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.applicantUid, 1, 128)
+        && isValidStr(data.businessName, 2, 140)
+        && isValidStr(data.ownerName, 2, 120)
+        && isValidStr(data.email, 3, 180)
+        && isValidStr(data.phone, 5, 40)
+        && isValidStr(data.neighbourhood, 2, 80)
+        && isValidStr(data.cuisine, 2, 160)
+        && isValidStr(data.submittedAt, 8, 40)
+        && data.status in ['Pending', 'Approved', 'Rejected']
+        && (!('reviewNote' in data) || isValidStr(data.reviewNote, 0, 400))
+        && (!('reviewedByUid' in data) || isValidStr(data.reviewedByUid, 1, 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDispute(data) {
+      return data.keys().hasAll([
+          'id', 'orderNumber', 'customerId', 'customerName', 'restaurantId',
+          'restaurantOwnerUid', 'restaurantName', 'reason', 'amount', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'orderNumber', 'orderId', 'customerId', 'customerName',
+          'restaurantId', 'restaurantOwnerUid', 'restaurantName', 'reason',
+          'amount', 'status', 'resolutionNote', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.orderNumber, 3, 40)
+        && (!('orderId' in data) || isValidStr(data.orderId, 1, 128))
+        && isValidStr(data.customerId, 1, 128)
+        && isValidStr(data.customerName, 1, 120)
+        && isValidId(data.restaurantId)
+        && isValidStr(data.restaurantOwnerUid, 1, 128)
+        && isValidStr(data.restaurantName, 2, 140)
+        && isValidStr(data.reason, 3, 500)
+        && isNonNegNum(data.amount)
+        && data.status in ['Open', 'Investigating', 'Resolved', 'Refunded']
+        && (!('resolutionNote' in data) || isValidStr(data.resolutionNote, 0, 400))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'message', 'targetAudience', 'priority', 'isActive',
+          'createdByUid', 'createdByEmail', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'title', 'message', 'targetAudience', 'priority', 'isActive',
+          'createdByUid', 'createdByEmail', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.title, 2, 140)
+        && isValidStr(data.message, 4, 600)
+        && data.targetAudience in ['all', 'vendors', 'customers']
+        && data.priority in ['Normal', 'Important']
+        && data.isActive is bool
+        && isValidStr(data.createdByUid, 1, 128)
+        && isValidStr(data.createdByEmail, 3, 180)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidMarketplaceSettings(data) {
+      return data.keys().hasAll([
+          'id', 'commissionRatePercent', 'serviceChargeFlat', 'defaultDeliveryFee',
+          'minPlatformOrder', 'defaultCity', 'paystackMode', 'autoAcceptOrders', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'commissionRatePercent', 'serviceChargeFlat', 'defaultDeliveryFee',
+          'minPlatformOrder', 'defaultCity', 'paystackMode', 'autoAcceptOrders',
+          'updatedByUid', 'updatedAt'
+        ])
+        && isValidStr(data.id, 1, 64)
+        && isNonNegNum(data.commissionRatePercent) && data.commissionRatePercent <= 40
+        && isNonNegNum(data.serviceChargeFlat)
+        && isNonNegNum(data.defaultDeliveryFee)
+        && isNonNegNum(data.minPlatformOrder)
+        && isValidStr(data.defaultCity, 2, 60)
+        && data.paystackMode in ['Test Preview', 'Live']
+        && data.autoAcceptOrders is bool
+        && (!('updatedByUid' in data) || isValidStr(data.updatedByUid, 1, 128))
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll([
+          'id', 'actorUid', 'actorEmail', 'action', 'targetType', 'targetId',
+          'summary', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'actorUid', 'actorEmail', 'action', 'targetType', 'targetId',
+          'summary', 'createdAt'
+        ])
+        && isValidId(data.id)
+        && isValidStr(data.actorUid, 1, 128)
+        && isValidStr(data.actorEmail, 3, 180)
+        && isValidStr(data.action, 2, 80)
+        && isValidStr(data.targetType, 2, 40)
+        && isValidStr(data.targetId, 1, 128)
+        && isValidStr(data.summary, 2, 400)
+        && data.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Match Blocks
+    // -------------------------------------------------------------------------
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (request.auth.uid == userId || isAdmin());
+      allow list: if isRootAdmin();
+      allow create: if isValidId(userId) && isAdmin()
+        && isValidAdminUser(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(userId) && isRootAdmin() && userId != request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (request.auth.uid == userId || isAdmin());
+      allow list: if isVerified() && isAdmin();
+      allow create: if isValidId(userId) && isVerified()
+        && isValidUserSummary(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (
+            request.auth.uid == userId
+            && incoming().role == 'customer'
+            && incoming().accountStatus == 'Active'
+            && incoming().totalOrders == 0
+            && incoming().totalSpent == 0
+          )
+        );
+      allow update: if isValidId(userId) && isVerified()
+        && isValidUserSummary(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'role', 'accountStatus', 'neighbourhood',
+            'vendorRestaurantId', 'totalOrders', 'totalSpent', 'updatedAt'
+          ]))
+          || (
+            request.auth.uid == userId
+            && incoming().role == existing().role
+            && incoming().accountStatus == existing().accountStatus
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'neighbourhood', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+
+      match /private/{docId} {
+        allow get: if isValidId(userId) && isValidId(docId) && isVerified()
+          && (request.auth.uid == userId || isAdmin());
+        allow list: if isVerified() && (request.auth.uid == userId || isAdmin());
+        allow create: if isValidId(userId) && isValidId(docId) && isVerified()
+          && (request.auth.uid == userId || isAdmin())
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == userId
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(userId) && isValidId(docId) && isVerified()
+          && (request.auth.uid == userId || isAdmin())
+          && exists(/databases/$(database)/documents/users/$(userId))
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly([
+            'email', 'phone', 'savedAddresses', 'notificationPreferences', 'updatedAt'
+          ]);
+        allow delete: if false;
+      }
+    }
+
+    match /restaurants/{restaurantId} {
+      allow get: if isValidId(restaurantId);
+      allow list: if true;
+      allow create: if isValidId(restaurantId) && isAdmin()
+        && isValidRestaurant(incoming())
+        && incoming().id == restaurantId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(restaurantId) && isVerified()
+        && isValidRestaurant(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'cuisine', 'categories', 'restaurantCategories', 'priceTier',
+            'averageMealPrice', 'neighbourhood', 'address', 'description',
+            'coverImage', 'logoText', 'deliveryTimeMin', 'deliveryTimeMax',
+            'deliveryFee', 'minimumOrder', 'openingHours', 'isOpen', 'status',
+            'rating', 'reviewCount', 'popularityScore', 'ownerUid', 'updatedAt'
+          ]))
+          || (
+            existing().ownerUid == request.auth.uid
+            && existing().status == 'Active'
+            && incoming().status == existing().status
+            && incoming().ownerUid == existing().ownerUid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'description', 'openingHours', 'isOpen', 'deliveryFee',
+              'minimumOrder', 'deliveryTimeMin', 'deliveryTimeMax', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /menuItems/{menuItemId} {
+      allow get: if isValidId(menuItemId);
+      allow list: if true;
+      allow create: if isValidId(menuItemId) && isVerified()
+        && isValidMenuItem(incoming())
+        && incoming().id == menuItemId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/restaurants/$(incoming().restaurantId))
+        && (
+          isAdmin()
+          || (
+            get(/databases/$(database)/documents/restaurants/$(incoming().restaurantId)).data.ownerUid == request.auth.uid
+            && incoming().ownerUid == request.auth.uid
+          )
+        );
+      allow update: if isValidId(menuItemId) && isVerified()
+        && isValidMenuItem(incoming())
+        && incoming().id == existing().id
+        && incoming().restaurantId == existing().restaurantId
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'name', 'description', 'category', 'menuSection', 'price', 'image',
+            'available', 'popular', 'sizes', 'extras', 'toppings', 'spiceLevels', 'updatedAt'
+          ]))
+          || (
+            existing().ownerUid == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'description', 'category', 'menuSection', 'price', 'image',
+              'available', 'popular', 'sizes', 'extras', 'toppings', 'spiceLevels', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(menuItemId) && isAdmin();
+    }
+
+    match /foodCategories/{categoryId} {
+      allow get: if isValidId(categoryId);
+      allow list: if true;
+      allow create: if isValidId(categoryId) && isAdmin()
+        && isValidFoodCategory(incoming())
+        && incoming().id == categoryId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(categoryId) && isAdmin()
+        && isValidFoodCategory(incoming())
+        && incoming().id == existing().id
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'label', 'subtitle', 'image', 'isActive', 'sortOrder', 'updatedAt'
+        ]);
+      allow delete: if isValidId(categoryId) && isAdmin();
+    }
+
+    match /orders/{orderId} {
+      allow get: if isValidId(orderId) && isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow list: if isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow create: if isValidId(orderId) && isVerified()
+        && isValidOrder(incoming())
+        && incoming().id == orderId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/restaurants/$(incoming().restaurantId))
+        && (
+          isAdmin()
+          || (
+            incoming().customerId == request.auth.uid
+            && incoming().restaurantOwnerUid == get(/databases/$(database)/documents/restaurants/$(incoming().restaurantId)).data.ownerUid
+            && (incoming().status == 'Order placed' || incoming().status == 'Payment confirmed')
+          )
+        );
+      allow update: if isValidId(orderId) && isVerified()
+        && isValidOrder(incoming())
+        && incoming().id == existing().id
+        && incoming().customerId == existing().customerId
+        && incoming().restaurantId == existing().restaurantId
+        && incoming().restaurantOwnerUid == existing().restaurantOwnerUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+            'status', 'paymentStatus', 'estimatedDelivery', 'updatedAt'
+          ]))
+          || (
+            existing().restaurantOwnerUid == request.auth.uid
+            && existing().status != 'Delivered'
+            && existing().status != 'Cancelled'
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow list: if isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow create: if isValidId(transactionId) && isVerified()
+        && isValidTransaction(incoming())
+        && incoming().id == transactionId
+        && incoming().createdAt == request.time
+        && (
+          isAdmin()
+          || (
+            incoming().customerId == request.auth.uid
+            && incoming().type == 'Charge'
+            && incoming().verificationStatus == 'Pending Verification'
+          )
+        );
+      allow update: if isValidId(transactionId) && isAdmin()
+        && isValidTransaction(incoming())
+        && incoming().id == existing().id
+        && incoming().orderId == existing().orderId
+        && incoming().grossAmount == existing().grossAmount
+        && incoming().subtotalAmount == existing().subtotalAmount
+        && incoming().commissionAmount == existing().commissionAmount
+        && incoming().vendorPayout == existing().vendorPayout
+        && incoming().reference == existing().reference
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'verificationStatus', 'verifiedByUid', 'verifiedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /vendorApplications/{applicationId} {
+      allow get: if isValidId(applicationId) && isVerified()
+        && (isAdmin() || existing().applicantUid == request.auth.uid);
+      allow list: if isVerified() && (isAdmin() || existing().applicantUid == request.auth.uid);
+
+      allow create: if isValidId(applicationId) && isVerified()
+        && isValidVendorApplication(incoming())
+        && incoming().id == applicationId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (incoming().applicantUid == request.auth.uid && incoming().status == 'Pending')
+        );
+      allow update: if isValidId(applicationId) && isAdmin()
+        && isValidVendorApplication(incoming())
+        && incoming().id == existing().id
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'reviewNote', 'reviewedByUid', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /disputes/{disputeId} {
+      allow get: if isValidId(disputeId) && isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow list: if isVerified()
+        && (
+          isAdmin()
+          || existing().customerId == request.auth.uid
+          || existing().restaurantOwnerUid == request.auth.uid
+        );
+      allow create: if isValidId(disputeId) && isVerified()
+        && isValidDispute(incoming())
+        && incoming().id == disputeId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin()
+          || (incoming().customerId == request.auth.uid && incoming().status == 'Open')
+        );
+      allow update: if isValidId(disputeId) && isAdmin()
+        && isValidDispute(incoming())
+        && incoming().id == existing().id
+        && incoming().customerId == existing().customerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'resolutionNote', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /announcements/{announcementId} {
+      allow get: if isValidId(announcementId) && (existing().isActive == true || isAdmin());
+      allow list: if existing().isActive == true || isAdmin();
+      allow create: if isValidId(announcementId) && isAdmin()
+        && isValidAnnouncement(incoming())
+        && incoming().id == announcementId
+        && incoming().createdByUid == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(announcementId) && isAdmin()
+        && isValidAnnouncement(incoming())
+        && incoming().id == existing().id
+        && incoming().createdByUid == existing().createdByUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'message', 'targetAudience', 'priority', 'isActive', 'updatedAt'
+        ]);
+      allow delete: if isValidId(announcementId) && isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow get: if isValidId(settingId);
+      allow list: if true;
+      allow create: if isValidId(settingId) && isAdmin()
+        && isValidMarketplaceSettings(incoming())
+        && incoming().id == settingId
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(settingId) && isAdmin()
+        && isValidMarketplaceSettings(incoming())
+        && incoming().id == existing().id
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'commissionRatePercent', 'serviceChargeFlat', 'defaultDeliveryFee',
+          'minPlatformOrder', 'defaultCity', 'paystackMode', 'autoAcceptOrders',
+          'updatedByUid', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    match /activityLogs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+      allow create: if isValidId(logId) && isAdmin()
+        && isValidActivityLog(incoming())
+        && incoming().id == logId
+        && incoming().actorUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+  }
+}
