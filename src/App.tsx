@@ -35,6 +35,7 @@ import {
   auth,
   FIREBASE_PROJECT_ID,
   FIRESTORE_DATABASE_ID,
+  getAuthErrorMessage,
   getFirestoreErrorMessage,
   googleProvider,
 } from './lib/firebase';
@@ -457,9 +458,7 @@ export default function App() {
     } catch (err) {
       pendingPortalRole.current = null;
       setAuthLoading(false);
-      setPortalAuthError(
-        err instanceof Error ? err.message : 'Could not complete Google sign-in.',
-      );
+      setPortalAuthError(getAuthErrorMessage(err));
       throw err;
     } finally {
       if (!requiredRole) setAuthLoading(false);

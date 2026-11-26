@@ -15,6 +15,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import { getAuthErrorMessage } from '../../lib/firebase';
 import {
   ActivityLog,
   Announcement,
@@ -173,9 +174,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
     try {
       await onGoogleSignIn();
     } catch (err) {
-      setLocalAuthError(
-        err instanceof Error ? err.message : 'Unable to complete super admin sign-in.',
-      );
+      setLocalAuthError(getAuthErrorMessage(err));
     }
   };
 

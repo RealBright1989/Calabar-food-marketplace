@@ -96,6 +96,40 @@ export function getFirestoreErrorMessage(error: unknown): string {
   return message;
 }
 
+export function getAuthErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code || '')
+      : '';
+  const raw = `${code} ${message}`;
+
+  if (raw.includes('auth/unauthorized-domain')) {
+    const hostname =
+      typeof window === 'undefined' || !window.location.hostname
+        ? 'this address'
+        : window.location.hostname;
+    return (
+      `Google sign-in is blocked on ${hostname}. Add ${hostname} in Firebase Console > ` +
+      'Authentication > Settings > Authorized domains, then reload this page. ' +
+      'You can also open the app on localhost, which Firebase allows by default.'
+    );
+  }
+  if (raw.includes('auth/popup-blocked')) {
+    return 'The sign-in popup was blocked. Allow popups for this site and try again.';
+  }
+  if (raw.includes('auth/popup-closed-by-user')) {
+    return 'Google sign-in was cancelled. Try again when ready.';
+  }
+  if (raw.includes('auth/network-request-failed')) {
+    return 'Google sign-in could not reach the network. Check your connection and try again.';
+  }
+  if (raw.includes('auth/operation-not-allowed')) {
+    return 'Google sign-in is not enabled for this Firebase project. Enable it in Firebase Console > Authentication > Sign-in method.';
+  }
+  return message || 'Could not complete Google sign-in. Please try again.';
+}
+
 export async function testConnection(): Promise<boolean> {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));

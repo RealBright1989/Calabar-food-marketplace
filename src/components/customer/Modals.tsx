@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { CALABAR_NEIGHBOURHOODS } from '../../data/calabarData';
+import { getAuthErrorMessage } from '../../lib/firebase';
 import { UserRole } from '../../types/marketplace';
 import { InputField, PrimaryButton } from '../ui/Primitives';
 
@@ -78,11 +79,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     try {
       await onGoogleSignIn();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Could not complete Google Sign-In. Please allow popups and try again.',
-      );
+      setError(getAuthErrorMessage(err));
     }
   };
 

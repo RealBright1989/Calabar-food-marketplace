@@ -18,6 +18,9 @@ View your app in AI Studio: https://ai.studio/apps/ad39e5a3-c3ad-48b4-bd40-1db03
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+4. Open `http://localhost:3000` on the computer running the app. If you open it from another device
+   (for example `http://10.10.3.126:3000`), add that hostname in Firebase Console > Authentication >
+   Settings > Authorized domains, or Google sign-in will fail with `auth/unauthorized-domain`.
 
 ## Paystack gateway
 

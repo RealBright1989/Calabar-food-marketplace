@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { ORDER_TIMELINE_STEPS } from '../../data/calabarData';
+import { getAuthErrorMessage } from '../../lib/firebase';
 import {
   ActivityLog,
   Announcement,
@@ -292,9 +293,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   try {
                     await onGoogleSignIn();
                   } catch (err) {
-                    setAuthError(
-                      err instanceof Error ? err.message : 'Unable to complete Google sign-in.',
-                    );
+                    setAuthError(getAuthErrorMessage(err));
                   }
                 }}
               >
@@ -317,9 +316,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     try {
                       await onGoogleSignIn();
                     } catch (err) {
-                      setAuthError(
-                        err instanceof Error ? err.message : 'Unable to switch Google account.',
-                      );
+                      setAuthError(getAuthErrorMessage(err));
                     }
                   }}
                 >
