@@ -182,4 +182,17 @@ export const DIRTY_DOZEN_PAYLOADS: SecurityTestCase[] = [
     expectedResult: 'PERMISSION_DENIED',
     enforcedByGate: 'isSuperAdmin()',
   },
+  {
+    id: 'DD-15',
+    title: 'Customer fabricates a Paystack payment session',
+    actorRole: 'customer',
+    operation: 'create',
+    path: '/paymentSessions/PSK-CAL-forged',
+    payload: {
+      status: 'paid',
+      amountKobo: 100000,
+    },
+    expectedResult: 'PERMISSION_DENIED',
+    enforcedByGate: 'match /paymentSessions/{reference} -> allow read, write: if false',
+  },
 ];

@@ -1186,6 +1186,11 @@ export const PlatformSettingsPanel: React.FC<PlatformSettingsPanelProps> = ({
               <option value="Test Preview">Test Preview</option>
               <option value="Live">Live</option>
             </select>
+            <p className="text-[12px] text-[#78716C] mt-1.5 leading-relaxed">
+              Live mode opens Paystack and verifies payments on the server before confirming an
+              order. Configure the Paystack keys and Firebase Admin credentials on the gateway
+              service.
+            </p>
           </div>
         </div>
 

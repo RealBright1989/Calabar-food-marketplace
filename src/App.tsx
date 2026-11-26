@@ -4,7 +4,7 @@ import { Bell, X } from 'lucide-react';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AccountPage } from './components/customer/AccountPage';
 import { CartDrawer } from './components/customer/CartDrawer';
-import { CheckoutPage } from './components/customer/CheckoutPage';
+import { CheckoutDetails, CheckoutPage } from './components/customer/CheckoutPage';
 import { HomePage } from './components/customer/HomePage';
 import { MealDetailModal } from './components/customer/MealDetailModal';
 import { AuthModal, VendorApplyModal } from './components/customer/Modals';
@@ -67,6 +67,13 @@ import {
   vendorUpdateOrderStatus,
   vendorUpdateRestaurant,
 } from './services/marketplaceDb';
+import {
+  getPaystackPublicKey,
+  initializePaystackPayment,
+  openPaystackCheckout,
+  PaystackOrderDraft,
+  verifyPaystackPayment,
+} from './services/paymentGateway';
 import {
   ActivityLog,
   Announcement,
@@ -555,28 +562,14 @@ export default function App() {
     setCartItems((prev) => prev.filter((item) => item.cartItemId !== cartItemId));
   };
 
-  const handlePlaceOrder = async (details: {
-    customerName: string;
-    customerPhone: string;
-    deliveryAddress: string;
-    neighbourhood: string;
-    deliveryInstructions: string;
-    paymentReference: string;
-  }): Promise<boolean> => {
-    if (!cartRestaurant || cartItems.length === 0) return false;
-
-    if (!firebaseUser && !isPreview) {
-      openCustomerAuth();
-      addToast('Please sign in with Google to place and track your order.', 'warning');
-      return false;
-    }
-
+  const buildCheckoutOrder = (details: CheckoutDetails, paymentVerified: boolean): Order => {
+    const restaurant = cartRestaurant!;
     const subtotal = cartItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-    const deliveryFee = cartRestaurant.deliveryFee;
+    const deliveryFee = restaurant.deliveryFee;
     const serviceCharge = settings.serviceChargeFlat;
     const total = subtotal + deliveryFee + serviceCharge;
 
-    const newOrder: Order = {
+    return {
       id: `ord-${Date.now()}`,
       orderNumber: generateOrderNumber(),
       customerId: firebaseUser?.uid || previewUid || 'preview-customer',
@@ -585,10 +578,10 @@ export default function App() {
       deliveryAddress: details.deliveryAddress,
       neighbourhood: details.neighbourhood,
       deliveryInstructions: details.deliveryInstructions || undefined,
-      restaurantId: cartRestaurant.id,
-      restaurantOwnerUid: cartRestaurant.ownerUid || 'vendor-demo-owner',
-      restaurantName: cartRestaurant.name,
-      restaurantAddress: cartRestaurant.address,
+      restaurantId: restaurant.id,
+      restaurantOwnerUid: restaurant.ownerUid || 'vendor-demo-owner',
+      restaurantName: restaurant.name,
+      restaurantAddress: restaurant.address,
       restaurantPhone: '0809 555 0142',
       items: cartItems.map((ci) => ({
         menuItemId: ci.menuItem.id,
@@ -609,15 +602,33 @@ export default function App() {
       deliveryFee,
       serviceCharge,
       total,
-      status: settings.autoAcceptOrders ? 'Vendor accepted' : 'Payment confirmed',
-      paymentStatus: 'Paid',
+      status: paymentVerified
+        ? settings.autoAcceptOrders
+          ? 'Vendor accepted'
+          : 'Payment confirmed'
+        : 'Order placed',
+      paymentStatus: paymentVerified ? 'Paid' : 'Pending',
       placedAt: new Date().toISOString(),
-      estimatedDelivery: `${cartRestaurant.deliveryTimeMin}–${cartRestaurant.deliveryTimeMax} mins`,
+      estimatedDelivery: `${restaurant.deliveryTimeMin}–${restaurant.deliveryTimeMax} mins`,
       paymentMethod: 'Paystack',
     };
+  };
+
+  const handlePlaceOrder = async (
+    details: CheckoutDetails & { paymentReference: string },
+  ): Promise<boolean> => {
+    if (!cartRestaurant || cartItems.length === 0) return false;
+
+    if (!firebaseUser && !isPreview) {
+      openCustomerAuth();
+      addToast('Please sign in with Google to place and track your order.', 'warning');
+      return false;
+    }
+
+    const newOrder = buildCheckoutOrder(details, true);
 
     if (isPreview) {
-      const commissionAmount = Math.round(subtotal * settings.commissionRatePercent) / 100;
+      const commissionAmount = Math.round(newOrder.subtotal * settings.commissionRatePercent) / 100;
       const previewTransaction: TransactionRecord = {
         id: nextPreviewId('txn'),
         orderId: newOrder.id,
@@ -630,12 +641,12 @@ export default function App() {
         reference: details.paymentReference,
         gateway: 'Paystack',
         type: 'Charge',
-        grossAmount: total,
-        subtotalAmount: subtotal,
+        grossAmount: newOrder.total,
+        subtotalAmount: newOrder.subtotal,
         commissionRatePercent: settings.commissionRatePercent,
         commissionAmount,
-        vendorPayout: subtotal - commissionAmount,
-        serviceCharge,
+        vendorPayout: newOrder.subtotal - commissionAmount,
+        serviceCharge: newOrder.serviceCharge,
         verificationStatus: 'Verified',
         verifiedByUid: previewUid,
         verifiedAt: new Date().toISOString(),
@@ -667,6 +678,103 @@ export default function App() {
     } catch (err) {
       handleDbError(err, 'Could not place order. Please check your permissions.');
       return false;
+    }
+  };
+
+  const handlePayWithPaystack = async (
+    details: CheckoutDetails,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    if (!cartRestaurant || cartItems.length === 0) {
+      return { ok: false, error: 'Add meals to your cart before paying.' };
+    }
+    if (isPreview) {
+      const previewReference = `PSK-CAL-PREVIEW-${Date.now().toString().slice(-6)}`;
+      const ok = await handlePlaceOrder({ ...details, paymentReference: previewReference });
+      return {
+        ok,
+        error: ok ? undefined : 'Preview payment could not be completed.',
+      };
+    }
+
+    if (!firebaseUser) {
+      openCustomerAuth();
+      addToast('Please sign in with Google before paying.', 'warning');
+      return { ok: false, error: 'Sign in with Google to continue.' };
+    }
+
+    try {
+      const idToken = await firebaseUser.getIdToken();
+      const order = buildCheckoutOrder(details, false);
+      const publicKey = getPaystackPublicKey();
+      if (!publicKey) {
+        return {
+          ok: false,
+          error: 'Paystack public key is not configured on this deployment.',
+        };
+      }
+
+      const orderDraft: PaystackOrderDraft = {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        deliveryAddress: order.deliveryAddress,
+        neighbourhood: order.neighbourhood,
+        deliveryInstructions: order.deliveryInstructions,
+        restaurantId: order.restaurantId,
+        restaurantOwnerUid: order.restaurantOwnerUid || 'vendor-demo-owner',
+        restaurantName: order.restaurantName,
+        restaurantAddress: order.restaurantAddress,
+        restaurantPhone: order.restaurantPhone,
+        items: order.items,
+        subtotal: order.subtotal,
+        deliveryFee: order.deliveryFee,
+        serviceCharge: order.serviceCharge,
+        total: order.total,
+        commissionRatePercent: settings.commissionRatePercent,
+        estimatedDelivery: order.estimatedDelivery,
+        placedAt: order.placedAt,
+      };
+
+      const session = await initializePaystackPayment({ order: orderDraft, idToken });
+      const reference = await openPaystackCheckout({
+        email: firebaseUser.email || '',
+        amount: order.total,
+        reference: session.reference,
+        accessCode: session.accessCode,
+        publicKey,
+      });
+
+      if (!reference) {
+        return {
+          ok: false,
+          error: 'Paystack was closed before payment completed. Your cart has been preserved.',
+        };
+      }
+
+      await verifyPaystackPayment({ reference, idToken });
+
+      const paidOrder: Order = {
+        ...order,
+        status: settings.autoAcceptOrders ? 'Vendor accepted' : 'Payment confirmed',
+        paymentStatus: 'Paid',
+      };
+      setOrders((prev) => [paidOrder, ...prev.filter((o) => o.id !== paidOrder.id)]);
+      setCartItems([]);
+      setSelectedOrderId(paidOrder.id);
+      setCurrentView('order-tracking');
+      addToast(
+        `Paystack payment ${reference} verified. Order ${paidOrder.orderNumber} placed.`,
+      );
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Paystack could not complete this payment. Your cart has been preserved.',
+      };
     }
   };
 
@@ -966,6 +1074,7 @@ export default function App() {
               }
             }}
             onPlaceOrder={(details) => handlePlaceOrder(details)}
+            onPayWithPaystack={(details) => handlePayWithPaystack(details)}
           />
         )}
 

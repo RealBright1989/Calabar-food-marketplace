@@ -13,6 +13,19 @@ import {
 import { DeliveryStaticMap } from '../ui/DeliveryStaticMap';
 import { InputField, PriceDisplay, PrimaryButton } from '../ui/Primitives';
 
+export interface CheckoutDetails {
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  neighbourhood: string;
+  deliveryInstructions: string;
+}
+
+export interface PaymentResult {
+  ok: boolean;
+  error?: string;
+}
+
 interface CheckoutPageProps {
   items: CartItem[];
   restaurant: Restaurant | null;
@@ -22,14 +35,8 @@ interface CheckoutPageProps {
   isSignedIn: boolean;
   onOpenAuth: () => void;
   onBackToMenu: () => void;
-  onPlaceOrder: (details: {
-    customerName: string;
-    customerPhone: string;
-    deliveryAddress: string;
-    neighbourhood: string;
-    deliveryInstructions: string;
-    paymentReference: string;
-  }) => Promise<boolean>;
+  onPlaceOrder: (details: CheckoutDetails & { paymentReference: string }) => Promise<boolean>;
+  onPayWithPaystack: (details: CheckoutDetails) => Promise<PaymentResult>;
 }
 
 type TestPaymentOutcome = 'success' | 'declined';
@@ -44,6 +51,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   onOpenAuth,
   onBackToMenu,
   onPlaceOrder,
+  onPayWithPaystack,
 }) => {
   const defaultAddress = customer.savedAddresses[0];
   const [customerName, setCustomerName] = useState(customer.name);
@@ -106,30 +114,46 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       return;
     }
 
+    const details: CheckoutDetails = {
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      deliveryAddress: deliveryAddress.trim(),
+      neighbourhood,
+      deliveryInstructions: deliveryInstructions.trim(),
+    };
+
     setIsSubmitting(true);
-    await new Promise((resolve) => window.setTimeout(resolve, 450));
-
-    if (paystackMode === 'Test Preview' && testOutcome === 'declined') {
-      setIsSubmitting(false);
-      setPaymentError(
-        'Paystack Test Decline (PSK-ERR-51): Transaction declined by test issuing bank (insufficient funds). Your cart has been preserved — switch to a valid test card or retry.',
-      );
-      return;
-    }
-
-    const paymentReference = `PSK-CAL-${Date.now().toString().slice(-6)}`;
     try {
-      const ok = await onPlaceOrder({
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        deliveryAddress: deliveryAddress.trim(),
-        neighbourhood,
-        deliveryInstructions: deliveryInstructions.trim(),
-        paymentReference,
-      });
+      if (paystackMode === 'Live') {
+        const result = await onPayWithPaystack(details);
+        if (!result.ok) {
+          setPaymentError(
+            result.error || 'Paystack could not complete this payment. Your cart has been preserved.',
+          );
+        }
+        return;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 450));
+
+      if (testOutcome === 'declined') {
+        setPaymentError(
+          'Paystack Test Decline (PSK-ERR-51): Transaction declined by test issuing bank (insufficient funds). Your cart has been preserved — switch to a valid test card or retry.',
+        );
+        return;
+      }
+
+      const paymentReference = `PSK-CAL-${Date.now().toString().slice(-6)}`;
+      const ok = await onPlaceOrder({ ...details, paymentReference });
       if (!ok) {
         setPaymentError('Unable to finalize order confirmation. Please review and try again.');
       }
+    } catch (error) {
+      setPaymentError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to complete payment. Your cart has been preserved.',
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -345,7 +369,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     <p className="mt-0.5 leading-relaxed">
                       {paystackMode === 'Test Preview'
                         ? 'Sandbox preview: no card is charged and no live Paystack transaction is created.'
-                        : 'Card and bank transfer details are handled by Paystack and are never collected directly on this website.'}
+                        : 'Card and bank transfer details are handled by Paystack. Payments are verified on the server before your order is confirmed.'}
                     </p>
 
                 </div>
@@ -405,7 +429,11 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                   className="inline-flex items-center gap-1.5 font-semibold text-[#1C1917] hover:text-[#EA580C] cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Switch back to valid test card &amp; retry</span>
+                  <span>
+                    {paystackMode === 'Live'
+                      ? 'Try Paystack again'
+                      : 'Switch back to valid test card & retry'}
+                  </span>
                 </button>
               </div>
             )}

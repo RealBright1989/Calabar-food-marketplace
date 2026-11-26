@@ -13,6 +13,11 @@ service cloud.firestore {
       allow get: if true;
     }
 
+    // Payment sessions are written and finalized only by the server gateway.
+    match /paymentSessions/{reference} {
+      allow read, write: if false;
+    }
+
     // -------------------------------------------------------------------------
     // Shared Hardened Primitives
     // -------------------------------------------------------------------------
