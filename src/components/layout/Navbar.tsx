@@ -37,6 +37,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const roleLabel =
+    userRole === 'super-admin'
+      ? 'Super Admin'
+      : userRole && userRole !== 'customer'
+        ? userRole.charAt(0).toUpperCase() + userRole.slice(1)
+        : '';
+
   const navLinks: NavLink[] = [
     { label: 'Home', view: 'home' },
     { label: 'Restaurants', view: 'restaurants' },
@@ -114,9 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <User className="w-4 h-4 text-[#78716C]" aria-hidden="true" />
             <span>
               {isLoggedIn
-                ? `${customerName.split(' ')[0]}${
-                    userRole && userRole !== 'customer' ? ` (${userRole})` : ''
-                  }`
+                ? `${customerName.split(' ')[0]}${roleLabel ? ` (${roleLabel})` : ''}`
                 : 'Log in'}
             </span>
           </button>
