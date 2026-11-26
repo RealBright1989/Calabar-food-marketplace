@@ -21,6 +21,8 @@ View your app in AI Studio: https://ai.studio/apps/ad39e5a3-c3ad-48b4-bd40-1db03
 4. Open `http://localhost:3000` on the computer running the app. If you open it from another device
    (for example `http://10.10.3.126:3000`), add that hostname in Firebase Console > Authentication >
    Settings > Authorized domains, or Google sign-in will fail with `auth/unauthorized-domain`.
+   The app cache-busts Firebase's project-config request so a stale allowlist is not reused after
+   you add a domain.
 
 ## Paystack gateway
 
