@@ -1,13 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { LocateFixed, MapPin, Navigation, Search } from 'lucide-react';
+import { LocateFixed, Navigation, Search } from 'lucide-react';
 import {
+  fetchOsrmRoute,
   isValidPoint,
   NEIGHBOURHOOD_CENTRES,
   pointForNeighbourhood,
   quoteDelivery,
 } from '../../../shared/delivery.js';
-import type { DeliveryQuote } from '../../../shared/delivery';
+import type { DeliveryQuote, DeliverySource } from '../../../shared/delivery';
 import { GeoPoint } from '../../types/marketplace';
+import {
+  searchCalabarAddresses,
+  AddressSuggestion,
+  reverseGeocode,
+} from '../../lib/osmGeocoder';
+import { OsmMapView } from '../ui/OsmMapView';
 
 type GoogleMaps = any;
 
@@ -18,7 +25,7 @@ export interface DeliveryLocationSelection {
   distanceKm: number;
   durationMin: number;
   deliveryFee: number;
-  source: 'google' | 'estimated';
+  source: DeliverySource;
 }
 
 interface DeliveryMapPickerProps {
@@ -50,6 +57,12 @@ declare global {
 }
 
 const MAPS_PLACEHOLDER = 'MY_GOOGLE_MAPS_API_KEY';
+
+export function deliverySourceLabel(source: DeliverySource | undefined): string {
+  if (source === 'google') return 'Google route';
+  if (source === 'osm') return 'OpenStreetMap route';
+  return 'Area estimate';
+}
 
 function asLatLng(point: GeoPoint) {
   return { lat: point.lat, lng: point.lng };
@@ -136,40 +149,40 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
   const [searchElement, setSearchElement] = useState<HTMLInputElement | null>(null);
   const [searchValue, setSearchValue] = useState(deliveryAddress);
   const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>(
-    mapsEnabled ? 'loading' : 'unavailable',
+    mapsEnabled ? 'loading' : 'ready',
   );
   const [statusMessage, setStatusMessage] = useState('');
+  const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const mapsRef = useRef<GoogleMaps | null>(null);
   const mapStateRef = useRef<LoadedMapState | null>(null);
-  const autocompleteRef = useRef<GoogleMaps | null>(null);
   const pickupRef = useRef<GeoPoint>(resolvedPickup);
   const neighbourhoodRef = useRef(neighbourhood);
   const deliveryLocationRef = useRef<GeoPoint | null | undefined>(deliveryLocation);
   const deliveryLat = deliveryLocation?.lat ?? null;
   const deliveryLng = deliveryLocation?.lng ?? null;
-  const configRef = useRef({
-    baseFee,
-    neighbourhood,
-    deliveryAddress,
-    deliveryLocation,
-    onSelect,
-  });
+  const configRef = useRef({ baseFee, neighbourhood, deliveryAddress, onSelect });
 
   pickupRef.current = resolvedPickup;
   neighbourhoodRef.current = neighbourhood;
   deliveryLocationRef.current = deliveryLocation;
-  configRef.current = { baseFee, neighbourhood, deliveryAddress, deliveryLocation, onSelect };
+  configRef.current = { baseFee, neighbourhood, deliveryAddress, onSelect };
 
   useEffect(() => {
     setSearchValue(deliveryAddress);
   }, [deliveryAddress]);
+
+  useEffect(() => {
+    if (!mapsEnabled) setStatus('ready');
+  }, [mapsEnabled]);
 
   const emitLocation = useCallback(async (point: GeoPoint, preferredAddress?: string) => {
     if (!isValidPoint(point)) return;
     const maps = mapsRef.current;
     let formattedAddress = preferredAddress?.trim() || configRef.current.deliveryAddress;
     let resolvedNeighbourhood = configRef.current.neighbourhood;
+    let routeSource: DeliverySource = 'estimated';
     let roadDistanceKm: number | undefined;
     let durationMin: number | undefined;
 
@@ -199,7 +212,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
 
       try {
         const matrix = new maps.DistanceMatrixService();
-        const route = await new Promise<GoogleMaps>((resolve) => {
+        const googleRoute = await new Promise<GoogleMaps>((resolve) => {
           matrix.getDistanceMatrix(
             {
               origins: [asLatLng(pickupRef.current)],
@@ -224,12 +237,34 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
             },
           );
         });
-        if (route) {
-          roadDistanceKm = route.distanceKm;
-          durationMin = route.durationMin;
+        if (googleRoute) {
+          roadDistanceKm = googleRoute.distanceKm;
+          durationMin = googleRoute.durationMin;
+          routeSource = 'google';
         }
       } catch {
-        // Distance Matrix is optional; shared haversine estimate is the fallback.
+        // Distance Matrix is optional; other route sources are tried below.
+      }
+    } else {
+      try {
+        if (!preferredAddress) {
+          const reverseAddress = await reverseGeocode(point);
+          if (reverseAddress) {
+            formattedAddress = reverseAddress;
+            resolvedNeighbourhood = matchNeighbourhood(reverseAddress) || resolvedNeighbourhood;
+          }
+        }
+      } catch {
+        // Reverse geocoding is optional; the selected coordinates still stand.
+      }
+    }
+
+    if (roadDistanceKm === undefined) {
+      const osmRoute = await fetchOsrmRoute(pickupRef.current, point);
+      if (osmRoute) {
+        roadDistanceKm = osmRoute.distanceKm;
+        durationMin = osmRoute.durationMin;
+        routeSource = 'osm';
       }
     }
 
@@ -239,7 +274,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
       baseFee: configRef.current.baseFee,
       roadDistanceKm,
       durationMin,
-      source: roadDistanceKm !== undefined ? 'google' : 'estimated',
+      source: routeSource,
     });
 
     configRef.current.onSelect({
@@ -253,9 +288,9 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
     });
   }, []);
 
-  const moveMarker = useCallback((point: GeoPoint) => {
+  const moveGoogleMarker = useCallback((point: GeoPoint) => {
     const state = mapStateRef.current;
-    if (!state || !isValidPoint(point)) return;
+    if (!state || !mapsRef.current || !isValidPoint(point)) return;
     state.deliveryMarker.setPosition(asLatLng(point));
     const bounds = new mapsRef.current.LatLngBounds();
     bounds.extend(asLatLng(pickupRef.current));
@@ -264,10 +299,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
   }, []);
 
   useEffect(() => {
-    if (!mapsEnabled) {
-      setStatus('unavailable');
-      return;
-    }
+    if (!mapsEnabled) return;
     if (!mapElement || !searchElement) return;
 
     let cancelled = false;
@@ -322,7 +354,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
               setStatusMessage('Choose a place suggestion so we can pinpoint the delivery address.');
               return;
             }
-            moveMarker(point);
+            moveGoogleMarker(point);
             void emitLocation(point, place?.formatted_address || place?.name || undefined);
           }),
         );
@@ -330,7 +362,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
           map.addListener('click', (event: GoogleMaps) => {
             const point = pointFromLatLng(event.latLng);
             if (point) {
-              moveMarker(point);
+              moveGoogleMarker(point);
               void emitLocation(point);
             }
           }),
@@ -344,7 +376,6 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
 
         mapsRef.current = maps;
         mapStateRef.current = { map, deliveryMarker, pickupMarker };
-        autocompleteRef.current = autocomplete;
         setStatus('ready');
         setStatusMessage('');
       })
@@ -353,8 +384,8 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
         setStatus('unavailable');
         setStatusMessage(
           error instanceof Error
-            ? `${error.message} Delivery distance will be estimated from your neighbourhood.`
-            : 'Delivery distance will be estimated from your neighbourhood.',
+            ? `${error.message} OpenStreetMap fallback is unavailable while Google Maps is configured.`
+            : 'Google Maps could not load.',
         );
       });
 
@@ -370,10 +401,9 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
       mapStateRef.current?.deliveryMarker.setMap(null);
       mapStateRef.current?.pickupMarker.setMap(null);
       mapStateRef.current = null;
-      autocompleteRef.current = null;
       mapsRef.current = null;
     };
-  }, [apiKey, mapsEnabled, mapElement, searchElement, restaurantName, emitLocation, moveMarker]);
+  }, [apiKey, mapsEnabled, mapElement, searchElement, restaurantName, emitLocation, moveGoogleMarker]);
 
   useEffect(() => {
     const state = mapStateRef.current;
@@ -383,6 +413,32 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
     state.deliveryMarker.setPosition(asLatLng(point));
     state.map.panTo(asLatLng(point));
   }, [deliveryLat, deliveryLng]);
+
+  const handleOsmSearch = async () => {
+    const query = searchValue.trim();
+    if (query.length < 3) {
+      setStatusMessage('Type at least 3 characters to search an address.');
+      return;
+    }
+    setSearching(true);
+    setStatusMessage('Searching OpenStreetMap...');
+    const results = await searchCalabarAddresses(query);
+    setSuggestions(results);
+    setSearching(false);
+    setStatusMessage(
+      results.length > 0
+        ? 'Select a result to drop the pin, or click anywhere on the map.'
+        : 'No matching address found. Click the map to place the pin manually.',
+    );
+  };
+
+  const handleSuggestionPick = (suggestion: AddressSuggestion) => {
+    setSearchValue(suggestion.label);
+    setSuggestions([]);
+    setStatusMessage('');
+    moveGoogleMarker(suggestion.point);
+    void emitLocation(suggestion.point, suggestion.label);
+  };
 
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -400,7 +456,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
           setStatusMessage('We could not read your current location. Try the map instead.');
           return;
         }
-        moveMarker(point);
+        moveGoogleMarker(point);
         void emitLocation(point);
         setStatusMessage('Current location selected. Confirm the street address below.');
       },
@@ -411,6 +467,11 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
     );
   };
 
+  const osmDeliveryPoint: GeoPoint =
+    deliveryLocation && isValidPoint(deliveryLocation)
+      ? deliveryLocation
+      : pointForNeighbourhood(neighbourhood) || { lat: 4.95, lng: 8.32 };
+
   return (
     <div className="rounded-[12px] border border-[#E7E5E4] bg-white overflow-hidden">
       <div className="px-4 py-3 border-b border-[#E7E5E4] bg-[#FFF7ED]/50 flex items-center justify-between gap-2">
@@ -418,7 +479,9 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
           <Navigation className="w-4 h-4 text-[#EA580C] shrink-0" aria-hidden="true" />
           <span className="text-[14px] font-semibold text-[#1C1917]">{heading}</span>
         </div>
-        <span className="text-[12px] text-[#78716C]">Calabar delivery zone</span>
+        <span className="text-[12px] text-[#78716C]">
+          {mapsEnabled ? 'Google Maps' : 'OpenStreetMap'}
+        </span>
       </div>
 
       <div className="p-4 space-y-3">
@@ -436,17 +499,51 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
             />
             <input
               id="delivery-map-search"
-              ref={setSearchElement}
+              ref={mapsEnabled ? setSearchElement : undefined}
               value={searchValue}
               onChange={(e) => {
                 setSearchValue(e.target.value);
                 onAddressChange(e.target.value);
+                if (!mapsEnabled) setSuggestions([]);
+              }}
+              onKeyDown={(e) => {
+                if (!mapsEnabled && e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleOsmSearch();
+                }
               }}
               placeholder="Start typing an address in Calabar"
               className="w-full h-12 pl-10 pr-3.5 rounded-[8px] bg-white border border-[#E7E5E4] focus:border-[#EA580C] focus:outline-none text-[15px] text-[#1C1917] placeholder:text-[#78716C]/80"
             />
+            {!mapsEnabled && (
+              <button
+                type="button"
+                onClick={() => void handleOsmSearch()}
+                disabled={searching}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 h-9 rounded-[7px] bg-[#EA580C] text-white text-[13px] font-semibold hover:bg-[#C2410C] disabled:opacity-60 cursor-pointer"
+              >
+                {searching ? 'Searching' : 'Search'}
+              </button>
+            )}
           </div>
         </div>
+
+        {!mapsEnabled && suggestions.length > 0 && (
+          <div className="rounded-[8px] border border-[#E7E5E4] bg-white overflow-hidden">
+            {suggestions.map((suggestion) => (
+              <button
+                key={suggestion.id}
+                type="button"
+                onClick={() => handleSuggestionPick(suggestion)}
+                className="w-full text-left px-3.5 py-2.5 border-b last:border-b-0 border-[#E7E5E4] hover:bg-[#FFF7ED] cursor-pointer"
+              >
+                <span className="block text-[13px] text-[#1C1917] line-clamp-2">
+                  {suggestion.label}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {mapsEnabled ? (
           <div className="relative w-full h-[280px] rounded-[8px] border border-[#E7E5E4] bg-[#F5F5F4] overflow-hidden">
@@ -456,18 +553,22 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
                 Loading delivery map...
               </div>
             )}
+            {status === 'unavailable' && (
+              <div className="absolute inset-0 flex items-center justify-center bg-[#FFF7ED]/90 text-[13px] text-[#78716C] p-5 text-center">
+                Map provider unavailable. You can still enter your neighbourhood and street address.
+              </div>
+            )}
           </div>
         ) : (
-          <div className="w-full h-[220px] rounded-[8px] border border-dashed border-[#E7E5E4] bg-[#FFF7ED]/60 flex flex-col items-center justify-center p-5 text-center">
-            <MapPin className="w-6 h-6 text-[#EA580C] mb-2" aria-hidden="true" />
-            <p className="text-[14px] font-semibold text-[#1C1917]">
-              Interactive map needs a Google Maps key
-            </p>
-            <p className="text-[13px] text-[#78716C] mt-1 max-w-sm">
-              Choose your neighbourhood and street address below. We will estimate the delivery
-              distance from {neighbourhood}.
-            </p>
-          </div>
+          <OsmMapView
+            pickup={resolvedPickup}
+            delivery={osmDeliveryPoint}
+            restaurantName={restaurantName}
+            onLocationSelect={(point) => {
+              setSuggestions([]);
+              void emitLocation(point);
+            }}
+          />
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -482,8 +583,7 @@ export const DeliveryMapPicker: React.FC<DeliveryMapPickerProps> = ({
           {quote && (
             <div className="text-[12px] text-[#78716C]">
               <span className="font-semibold text-[#1C1917]">{quote.distanceKm} km</span> ·{' '}
-              {quote.durationMin} mins ·{' '}
-              {quote.source === 'google' ? 'Google route' : 'Area estimate'}
+              {quote.durationMin} mins · {deliverySourceLabel(quote.source)}
             </div>
           )}
         </div>

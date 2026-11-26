@@ -17,6 +17,76 @@ export const FEE_PER_EXTRA_KM = 150;
 export const MAX_DELIVERY_FEE = 3000;
 export const ROAD_FACTOR = 1.3;
 
+const ROUTE_CACHE_LIMIT = 80;
+const routeCache = new Map();
+
+/**
+ * Free road-route fallback from OpenStreetMap's public OSRM demo server.
+ * No API key is required. The result is cached so checkout and the gateway do
+ * not repeat the same request during one payment flow.
+ */
+export async function fetchOsrmRoute(
+  from,
+  to,
+  { withGeometry = false, timeoutMs = 7000 } = {},
+) {
+  if (!isValidPoint(from) || !isValidPoint(to)) return null;
+
+  const key =
+    `${from.lat.toFixed(5)},${from.lng.toFixed(5)}>` +
+    `${to.lat.toFixed(5)},${to.lng.toFixed(5)}|${withGeometry ? 1 : 0}`;
+  if (routeCache.has(key)) return routeCache.get(key);
+
+  const coordinates = `${from.lng},${from.lat};${to.lng},${to.lat}`;
+  const overview = withGeometry ? 'simplified' : 'false';
+  const geometries = withGeometry ? '&geometries=geojson' : '';
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/${coordinates}` +
+    `?overview=${overview}&alternatives=false&steps=false${geometries}`;
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  const request = (async () => {
+    try {
+      const response = await fetch(url, {
+        signal: controller?.signal,
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) return null;
+
+      const payload = await response.json();
+      const route = payload?.routes?.[0];
+      if (payload?.code !== 'Ok' || !route) return null;
+      if (typeof route.distance !== 'number' || typeof route.duration !== 'number') return null;
+
+      const geometry = withGeometry && Array.isArray(route.geometry?.coordinates)
+        ? route.geometry.coordinates
+            .map(([lng, lat]) => ({ lat: Number(lat), lng: Number(lng) }))
+            .filter(isValidPoint)
+        : undefined;
+
+      return {
+        distanceKm: route.distance / 1000,
+        durationMin: route.duration / 60,
+        source: 'osm',
+        ...(geometry ? { geometry } : {}),
+      };
+    } catch {
+      return null;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  })();
+
+  routeCache.set(key, request);
+  if (routeCache.size > ROUTE_CACHE_LIMIT) {
+    const oldestKey = routeCache.keys().next().value;
+    if (oldestKey !== undefined) routeCache.delete(oldestKey);
+  }
+  return request;
+}
+
 export function isValidPoint(point) {
   if (!point || typeof point !== 'object') return false;
   const { lat, lng } = point;

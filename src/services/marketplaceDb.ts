@@ -1633,7 +1633,9 @@ export async function customerCreateOrderAndTransaction(
           ? Math.round(order.deliveryDurationMin)
           : undefined,
       locationSource:
-        order.locationSource === 'google' || order.locationSource === 'estimated'
+        order.locationSource === 'google' ||
+        order.locationSource === 'osm' ||
+        order.locationSource === 'estimated'
           ? order.locationSource
           : 'estimated',
       restaurantOwnerUid: clampStr(order.restaurantOwnerUid || 'vendor-demo-owner', 128),

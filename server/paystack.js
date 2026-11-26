@@ -14,6 +14,7 @@ import {
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import {
+  fetchOsrmRoute,
   isValidPoint,
   pointForNeighbourhood,
   quoteDelivery,
@@ -79,16 +80,18 @@ function getAdminAuth() {
   return getAuth(app);
 }
 
-function gatewayConfigError() {
+function gatewayMissing() {
   const missing = [];
   if (!process.env.PAYSTACK_SECRET_KEY) missing.push('PAYSTACK_SECRET_KEY');
-  if (!getAdminApp()) {
-    missing.push(
-      adminInitError || 'FIREBASE_SERVICE_ACCOUNT or GOOGLE_APPLICATION_CREDENTIALS',
-    );
-  }
+  if (!getAdminApp()) missing.push('FIREBASE_ADMIN_CREDENTIALS');
+  return missing;
+}
+
+function gatewayConfigError() {
+  const missing = gatewayMissing();
   if (missing.length === 0) return null;
-  return `Payment gateway is not configured: ${missing.join(', ')}.`;
+  const detail = getAdminApp() ? '' : ` (${adminInitError || 'invalid credentials'})`;
+  return `Payment gateway is not configured: ${missing.join(', ')}${detail}.`;
 }
 
 function cleanString(value, maxLength, minLength = 1) {
@@ -203,7 +206,10 @@ function normalizeOrderDraft(input, uid) {
   const deliveryLocation = cleanPoint(input.deliveryLocation);
   const deliveryDistanceKm = cleanDecimal(input.deliveryDistanceKm, 500);
   const deliveryDurationMin = cleanAmount(input.deliveryDurationMin);
-  const locationSource = input.locationSource === 'google' ? 'google' : 'estimated';
+  const locationSource =
+    input.locationSource === 'google' || input.locationSource === 'osm'
+      ? input.locationSource
+      : 'estimated';
 
   const computedSubtotal = items.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
@@ -291,14 +297,19 @@ async function applyServerPricing(order, db) {
   const delivery = cleanPoint(order.deliveryLocation);
   if (!pickup || !delivery) return null;
 
-  const route = await googleRoadRoute(pickup, delivery);
+  // Google wins when a server key is configured; otherwise the free OSRM route
+  // gives road-distance pricing without any API key. Coordinate estimates stay
+  // as the final fallback if both providers are unavailable.
+  const route =
+    (await googleRoadRoute(pickup, delivery)) ||
+    (await fetchOsrmRoute(pickup, delivery, { timeoutMs: 6000 }));
   const quote = quoteDelivery({
     pickup,
     delivery,
     baseFee,
     roadDistanceKm: route?.distanceKm,
     durationMin: route?.durationMin,
-    source: route ? 'google' : 'estimated',
+    source: route?.source || 'estimated',
   });
 
   const minTime = cleanAmount(restaurant.deliveryTimeMin) || 10;
@@ -546,7 +557,19 @@ app.post(
 app.use(express.json({ limit: '512kb' }));
 
 app.get('/api/payments/health', (_req, res) => {
-  res.json({ ok: true, configured: gatewayConfigError() === null });
+  const missing = gatewayMissing();
+  res.json({
+    ok: true,
+    configured: missing.length === 0,
+    missing,
+    webhookConfigured: Boolean(process.env.PAYSTACK_WEBHOOK_SECRET),
+    routing: {
+      google: Boolean(
+        process.env.GOOGLE_MAPS_SERVER_KEY || process.env.GOOGLE_MAPS_API_KEY,
+      ),
+      osm: true,
+    },
+  });
 });
 
 app.post('/api/payments/initialize', async (req, res) => {

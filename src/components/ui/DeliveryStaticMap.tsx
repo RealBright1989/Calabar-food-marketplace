@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapPin, Navigation } from 'lucide-react';
-import { isValidPoint } from '../../../shared/delivery.js';
+import { Navigation } from 'lucide-react';
+import { isValidPoint, pointForNeighbourhood } from '../../../shared/delivery.js';
 import { GeoPoint } from '../../types/marketplace';
+import { OsmMapView } from './OsmMapView';
 
 interface DeliveryStaticMapProps {
   restaurantName: string;
@@ -27,6 +28,7 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
   heading = 'Route overview',
 }) => {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
+  const googleMapsEnabled = Boolean(apiKey && apiKey !== 'MY_GOOGLE_MAPS_API_KEY');
 
   const destinationDisplay = deliveryAddress.trim()
     ? `${deliveryAddress.trim()}, ${neighbourhood}, Calabar`
@@ -43,7 +45,7 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
   }, [destinationDisplay]);
 
   const staticMapUrl = useMemo(() => {
-    if (!apiKey || apiKey === 'MY_GOOGLE_MAPS_API_KEY') return null;
+    if (!googleMapsEnabled || !apiKey) return null;
 
     const originLocation =
       pointText(pickupLocation) || `${restaurantAddress}, Calabar, Cross River, Nigeria`;
@@ -67,13 +69,21 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
     );
 
     return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-  }, [apiKey, restaurantAddress, debouncedDest, pickupLocation, deliveryLocation]);
+  }, [apiKey, googleMapsEnabled, restaurantAddress, debouncedDest, pickupLocation, deliveryLocation]);
 
   useEffect(() => {
-    if (staticMapUrl) {
-      setImageStatus('loading');
-    }
+    if (staticMapUrl) setImageStatus('loading');
   }, [staticMapUrl]);
+
+  const resolvedPickup: GeoPoint =
+    pickupLocation && isValidPoint(pickupLocation)
+      ? pickupLocation
+      : pointForNeighbourhood('Marian Road') || { lat: 4.95, lng: 8.32 };
+  const resolvedDelivery: GeoPoint =
+    deliveryLocation && isValidPoint(deliveryLocation)
+      ? deliveryLocation
+      : pointForNeighbourhood(neighbourhood) || { lat: 4.95, lng: 8.32 };
+  const showOsmMap = !staticMapUrl || imageStatus === 'error';
 
   return (
     <div className="rounded-[12px] border border-[#E7E5E4] bg-white overflow-hidden">
@@ -85,9 +95,17 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
         <span className="text-[12px] text-[#78716C]">Calabar delivery zone</span>
       </div>
 
-      {/* Static Map Image Frame (2:1 aspect ratio matches 640x320 so attribution is never cropped) */}
+      {/* Static Google image when configured; otherwise a live OpenStreetMap view. */}
       <div className="relative w-full aspect-[2/1] bg-[#F5F5F4] overflow-hidden">
-        {staticMapUrl && imageStatus !== 'error' ? (
+        {showOsmMap ? (
+          <OsmMapView
+            pickup={resolvedPickup}
+            delivery={resolvedDelivery}
+            restaurantName={restaurantName}
+            className="w-full h-full rounded-none border-0"
+            interactive={false}
+          />
+        ) : (
           <>
             {imageStatus === 'loading' && (
               <div
@@ -98,8 +116,8 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
               </div>
             )}
             <img
-              src={staticMapUrl}
-              alt={`Static map showing pickup at ${restaurantName} (${restaurantAddress}) and delivery to ${debouncedDest}`}
+              src={staticMapUrl!}
+              alt={`Map showing pickup at ${restaurantName} (${restaurantAddress}) and delivery to ${debouncedDest}`}
               width={640}
               height={320}
               onLoad={() => setImageStatus('loaded')}
@@ -107,18 +125,6 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
               className="w-full h-full object-contain block"
             />
           </>
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center p-5 text-center bg-[#FFF7ED]/60">
-            <MapPin className="w-6 h-6 text-[#EA580C] mb-2" aria-hidden="true" />
-            <p className="text-[14px] font-semibold text-[#1C1917]">
-              Map preview unavailable right now
-            </p>
-            <p className="text-[13px] text-[#78716C] mt-1 max-w-sm">
-              {!staticMapUrl
-                ? 'Configure your Google Maps API key to display the static route map.'
-                : 'Unable to load the static map image. Check your network connection or API key restrictions.'}
-            </p>
-          </div>
         )}
       </div>
 

@@ -4,8 +4,12 @@ import {
   CALABAR_NEIGHBOURHOODS,
   INITIAL_CUSTOMER_PROFILE,
 } from '../../data/calabarData';
-import { pointForNeighbourhood, quoteDelivery } from '../../../shared/delivery.js';
-import type { DeliveryQuote } from '../../../shared/delivery';
+import {
+  fetchOsrmRoute,
+  pointForNeighbourhood,
+  quoteDelivery,
+} from '../../../shared/delivery.js';
+import type { DeliveryQuote, DeliverySource } from '../../../shared/delivery';
 import {
   CartItem,
   CustomerProfile,
@@ -13,7 +17,11 @@ import {
   MarketplaceSettings,
   Restaurant,
 } from '../../types/marketplace';
-import { DeliveryLocationSelection, DeliveryMapPicker } from './DeliveryMapPicker';
+import {
+  DeliveryLocationSelection,
+  DeliveryMapPicker,
+  deliverySourceLabel,
+} from './DeliveryMapPicker';
 import { InputField, PriceDisplay, PrimaryButton } from '../ui/Primitives';
 
 export interface CheckoutDetails {
@@ -27,7 +35,7 @@ export interface CheckoutDetails {
   deliveryDistanceKm: number;
   deliveryDurationMin: number;
   deliveryFee: number;
-  locationSource: 'google' | 'estimated';
+  locationSource: DeliverySource;
 }
 
 export interface PaymentResult {
@@ -77,6 +85,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [locationSelection, setLocationSelection] = useState<DeliveryLocationSelection | null>(
     null,
   );
+  const [autoRoute, setAutoRoute] = useState<{
+    distanceKm: number;
+    durationMin: number;
+  } | null>(null);
 
   // Sync profile fields once Firebase Auth finishes resolving customer data
   useEffect(() => {
@@ -121,6 +133,18 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     return pointForNeighbourhood(neighbourhood) || pickupLocation;
   }, [locationSelection, customer.savedAddresses, deliveryAddress, neighbourhood, pickupLocation]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setAutoRoute(null);
+    void fetchOsrmRoute(pickupLocation, deliveryLocation).then((route) => {
+      if (cancelled || !route) return;
+      setAutoRoute({ distanceKm: route.distanceKm, durationMin: route.durationMin });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pickupLocation, deliveryLocation]);
+
   const deliveryQuote = useMemo<DeliveryQuote>(
     () =>
       locationSelection
@@ -135,8 +159,17 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             pickup: pickupLocation,
             delivery: deliveryLocation,
             baseFee: restaurant?.deliveryFee ?? 0,
+            roadDistanceKm: autoRoute?.distanceKm,
+            durationMin: autoRoute?.durationMin,
+            source: autoRoute ? 'osm' : 'estimated',
           }),
-    [locationSelection, pickupLocation, deliveryLocation, restaurant?.deliveryFee],
+    [
+      locationSelection,
+      pickupLocation,
+      deliveryLocation,
+      restaurant?.deliveryFee,
+      autoRoute,
+    ],
   );
 
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
@@ -426,8 +459,13 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               </div>
               <div className="flex justify-between text-[#78716C]">
                 <span>Delivery distance</span>
-                <span className="font-medium text-[#1C1917]">
-                  {deliveryQuote.distanceKm} km · {deliveryQuote.durationMin} mins
+                <span className="text-right">
+                  <span className="font-medium text-[#1C1917]">
+                    {deliveryQuote.distanceKm} km · {deliveryQuote.durationMin} mins
+                  </span>
+                  <span className="block text-[12px] text-[#78716C]">
+                    {deliverySourceLabel(deliveryQuote.source)}
+                  </span>
                 </span>
               </div>
               <div className="flex justify-between text-[#78716C]">

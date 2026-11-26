@@ -51,14 +51,19 @@ Vite proxies `/api/payments` to `http://localhost:3001` in development. For prod
 `npm run build`, then `npm start`; the gateway serves `dist/` and `/api/payments` from the same
 origin. Configure Paystack's webhook URL as `https://your-domain/api/payments/webhook`.
 
+After adding keys to `.env.local`, restart the gateway and open
+`http://localhost:3001/api/payments/health`. It reports only missing key names, never key values.
+Do not commit `.env.local` or service-account JSON.
+
 ## Delivery map and distance pricing
 
-Checkout includes an interactive delivery map powered by Google Maps. Customers can search an
-address, click the map, drag the green marker, or use browser location. The selected coordinates,
-road distance, travel time, and delivery fee are carried into the order and the Paystack payment
-session.
+Checkout includes an interactive map. Customers can search an address, click the map, drag the
+green marker, or use browser location. The selected coordinates, road distance, travel time, and
+delivery fee are carried into the order and the Paystack payment session.
 
-Set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local` and enable these APIs:
+The default map needs no API key: it uses OpenStreetMap tiles, Nominatim address search, and the
+public OSRM demo router. Those free services are rate-limited, so for production traffic set
+`VITE_GOOGLE_MAPS_API_KEY` in `.env.local` and enable:
 
 - Maps JavaScript API
 - Places API (New) or Places API
@@ -66,13 +71,14 @@ Set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local` and enable these APIs:
 - Distance Matrix API
 - Maps Static API
 
-Without a browser key, checkout still works: it estimates distance from the selected neighbourhood
-and restaurant coordinates. The pricing rule lives in `shared/delivery.js` and is reused by the
-gateway, so customer and server totals follow the same formula:
+The pricing rule lives in `shared/delivery.js` and is reused by the gateway, so customer and server
+totals follow the same formula:
 
 - restaurant's base delivery fee covers the first 2 km
 - `₦150` is added for each extra kilometre
 - total delivery fee is capped at `₦3000`
 
-For authoritative server pricing, set `GOOGLE_MAPS_SERVER_KEY` on the gateway. If it is absent, the
-gateway uses the shared coordinate-based estimate and ignores client-supplied prices.
+Server pricing is authoritative and ignores client-supplied prices. It prefers Google Distance
+Matrix when `GOOGLE_MAPS_SERVER_KEY` is set, then uses the free OSRM route, then falls back to the
+shared coordinate estimate. `GET /api/payments/health` reports key names that are missing without
+printing any secret values.

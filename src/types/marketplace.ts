@@ -150,7 +150,7 @@ export interface Order {
   deliveryLocation?: GeoPoint;
   deliveryDistanceKm?: number;
   deliveryDurationMin?: number;
-  locationSource?: 'google' | 'estimated';
+  locationSource?: 'google' | 'osm' | 'estimated';
   restaurantId: string;
   restaurantOwnerUid?: string;
   restaurantName: string;

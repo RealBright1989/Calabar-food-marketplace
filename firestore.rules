@@ -247,7 +247,7 @@ service cloud.firestore {
         && (!('deliveryLocation' in data) || isValidGeoPoint(data.deliveryLocation))
         && (!('deliveryDistanceKm' in data) || isNonNegNum(data.deliveryDistanceKm))
         && (!('deliveryDurationMin' in data) || isNonNegNum(data.deliveryDurationMin))
-        && (!('locationSource' in data) || data.locationSource in ['google', 'estimated'])
+        && (!('locationSource' in data) || data.locationSource in ['google', 'osm', 'estimated'])
         && isValidId(data.restaurantId)
         && isValidStr(data.restaurantOwnerUid, 1, 128)
         && isValidStr(data.restaurantName, 2, 140)

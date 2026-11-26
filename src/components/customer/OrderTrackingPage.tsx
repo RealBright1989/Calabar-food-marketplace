@@ -4,6 +4,7 @@ import { ORDER_TIMELINE_STEPS } from '../../data/calabarData';
 import { Order, OrderStatus } from '../../types/marketplace';
 import { formatOrderTime } from '../../utils/format';
 import { DeliveryStaticMap } from '../ui/DeliveryStaticMap';
+import { deliverySourceLabel } from './DeliveryMapPicker';
 import { EmptyState, PriceDisplay, PrimaryButton, StatusBadge } from '../ui/Primitives';
 
 interface OrderTrackingPageProps {
@@ -237,7 +238,7 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                   </span>
                   {activeOrder.deliveryDurationMin !== undefined &&
                     ` · ${activeOrder.deliveryDurationMin} mins`}
-                  {activeOrder.locationSource === 'google' ? ' · Google route' : ' · Area estimate'}
+                  {` · ${deliverySourceLabel(activeOrder.locationSource)}`}
                 </div>
               )}
             </div>

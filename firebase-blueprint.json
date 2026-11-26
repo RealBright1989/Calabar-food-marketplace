@@ -416,7 +416,7 @@
         },
         "locationSource": {
           "type": "string",
-          "enum": ["google", "estimated"],
+          "enum": ["google", "osm", "estimated"],
           "maxLength": 20
         },
         "restaurantId": {
