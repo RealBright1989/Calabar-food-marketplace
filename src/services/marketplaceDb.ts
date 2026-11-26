@@ -44,6 +44,7 @@ import {
   CustomerProfile,
   Dispute,
   FoodCategoryDoc,
+  GeoPoint,
   MarketplaceSettings,
   MenuItem,
   NotificationPreferences,
@@ -74,6 +75,30 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Record<string
     if (v !== undefined) out[k] = v;
   }
   return out;
+}
+
+function sanitizeGeoPoint(value: GeoPoint | undefined | null): GeoPoint | undefined {
+  if (!value) return undefined;
+  const lat = Number(value.lat);
+  const lng = Number(value.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return undefined;
+  return { lat, lng };
+}
+
+function sanitizeSavedAddresses(addresses: CustomerProfile['savedAddresses']) {
+  return addresses.slice(0, 10).map((address) => {
+    const lat = typeof address.lat === 'number' && Number.isFinite(address.lat) ? address.lat : null;
+    const lng = typeof address.lng === 'number' && Number.isFinite(address.lng) ? address.lng : null;
+    return omitUndefined({
+      id: sanitizeId(address.id),
+      label: clampStr(address.label, 60, 'Saved location'),
+      street: clampStr(address.street, 240),
+      neighbourhood: clampStr(address.neighbourhood, 80),
+      lat: lat !== null && lat >= -90 && lat <= 90 ? lat : undefined,
+      lng: lng !== null && lng >= -180 && lng <= 180 ? lng : undefined,
+    });
+  });
 }
 
 const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -1045,6 +1070,7 @@ export async function adminUpdateRestaurantDetails(
     neighbourhood:
       patch.neighbourhood !== undefined ? clampStr(patch.neighbourhood, 80) : undefined,
     address: patch.address !== undefined ? clampStr(patch.address, 240) : undefined,
+    location: patch.location !== undefined ? sanitizeGeoPoint(patch.location) : undefined,
     openingHours:
       patch.openingHours !== undefined ? clampStr(patch.openingHours, 80) : undefined,
     deliveryFee: patch.deliveryFee,
@@ -1596,6 +1622,20 @@ export async function customerCreateOrderAndTransaction(
       deliveryInstructions: order.deliveryInstructions
         ? clampStr(order.deliveryInstructions, 300)
         : undefined,
+      pickupLocation: sanitizeGeoPoint(order.pickupLocation),
+      deliveryLocation: sanitizeGeoPoint(order.deliveryLocation),
+      deliveryDistanceKm:
+        typeof order.deliveryDistanceKm === 'number' && order.deliveryDistanceKm >= 0
+          ? Math.round(order.deliveryDistanceKm * 10) / 10
+          : undefined,
+      deliveryDurationMin:
+        typeof order.deliveryDurationMin === 'number' && order.deliveryDurationMin >= 0
+          ? Math.round(order.deliveryDurationMin)
+          : undefined,
+      locationSource:
+        order.locationSource === 'google' || order.locationSource === 'estimated'
+          ? order.locationSource
+          : 'estimated',
       restaurantOwnerUid: clampStr(order.restaurantOwnerUid || 'vendor-demo-owner', 128),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -1694,7 +1734,7 @@ export async function customerUpdateProfile(
       omitUndefined({
         email: patch.email && patch.email.trim().length >= 3 ? clampStr(patch.email, 180) : undefined,
         phone: patch.phone !== undefined ? clampStr(patch.phone, 40) : undefined,
-        savedAddresses: patch.savedAddresses ? patch.savedAddresses.slice(0, 10) : undefined,
+        savedAddresses: patch.savedAddresses ? sanitizeSavedAddresses(patch.savedAddresses) : undefined,
         notificationPreferences: patch.notificationPreferences
           ? sanitizeNotificationPreferences(patch.notificationPreferences)
           : undefined,

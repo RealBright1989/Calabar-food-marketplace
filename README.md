@@ -50,3 +50,29 @@ npm run dev
 Vite proxies `/api/payments` to `http://localhost:3001` in development. For production, run
 `npm run build`, then `npm start`; the gateway serves `dist/` and `/api/payments` from the same
 origin. Configure Paystack's webhook URL as `https://your-domain/api/payments/webhook`.
+
+## Delivery map and distance pricing
+
+Checkout includes an interactive delivery map powered by Google Maps. Customers can search an
+address, click the map, drag the green marker, or use browser location. The selected coordinates,
+road distance, travel time, and delivery fee are carried into the order and the Paystack payment
+session.
+
+Set `VITE_GOOGLE_MAPS_API_KEY` in `.env.local` and enable these APIs:
+
+- Maps JavaScript API
+- Places API (New) or Places API
+- Geocoding API
+- Distance Matrix API
+- Maps Static API
+
+Without a browser key, checkout still works: it estimates distance from the selected neighbourhood
+and restaurant coordinates. The pricing rule lives in `shared/delivery.js` and is reused by the
+gateway, so customer and server totals follow the same formula:
+
+- restaurant's base delivery fee covers the first 2 km
+- `₦150` is added for each extra kilometre
+- total delivery fee is capped at `₦3000`
+
+For authoritative server pricing, set `GOOGLE_MAPS_SERVER_KEY` on the gateway. If it is absent, the
+gateway uses the shared coordinate-based estimate and ignores client-supplied prices.

@@ -187,6 +187,8 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
             }
             deliveryAddress={activeOrder.deliveryAddress}
             neighbourhood={activeOrder.neighbourhood}
+            pickupLocation={activeOrder.pickupLocation}
+            deliveryLocation={activeOrder.deliveryLocation}
             heading="Delivery route map"
           />
 
@@ -226,6 +228,18 @@ export const OrderTrackingPage: React.FC<OrderTrackingPageProps> = ({
                   )}
                 </div>
               </div>
+
+              {activeOrder.deliveryDistanceKm !== undefined && (
+                <div className="pt-3 border-t border-[#E7E5E4] text-[13px] text-[#78716C]">
+                  Delivery route:{' '}
+                  <span className="font-semibold text-[#1C1917]">
+                    {activeOrder.deliveryDistanceKm} km
+                  </span>
+                  {activeOrder.deliveryDurationMin !== undefined &&
+                    ` · ${activeOrder.deliveryDurationMin} mins`}
+                  {activeOrder.locationSource === 'google' ? ' · Google route' : ' · Area estimate'}
+                </div>
+              )}
             </div>
           </div>
 

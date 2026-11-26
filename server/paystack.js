@@ -13,6 +13,11 @@ import {
 } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import {
+  isValidPoint,
+  pointForNeighbourhood,
+  quoteDelivery,
+} from '../shared/delivery.js';
 
 dotenv.config();
 
@@ -98,6 +103,61 @@ function cleanAmount(value) {
   return Math.round(value);
 }
 
+function cleanDecimal(value, max) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max) {
+    return null;
+  }
+  return Math.round(value * 10) / 10;
+}
+
+function cleanPoint(value) {
+  if (!value || typeof value !== 'object') return null;
+  const lat = value.lat;
+  const lng = value.lng;
+  const point = {
+    lat: typeof lat === 'number' ? lat : Number(lat),
+    lng: typeof lng === 'number' ? lng : Number(lng),
+  };
+  return isValidPoint(point) ? point : null;
+}
+
+async function googleRoadRoute(pickup, delivery) {
+  const key =
+    process.env.GOOGLE_MAPS_SERVER_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY ||
+    '';
+  if (!key) return null;
+
+  const origins = `${pickup.lat},${pickup.lng}`;
+  const destinations = `${delivery.lat},${delivery.lng}`;
+  const url =
+    `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origins)}` +
+    `&destinations=${encodeURIComponent(destinations)}&units=metric&key=${encodeURIComponent(key)}`;
+
+  try {
+    const response = await fetch(url);
+    const payload = await response.json();
+    const element = payload?.rows?.[0]?.elements?.[0];
+    if (
+      !response.ok ||
+      payload.status !== 'OK' ||
+      payload.geocoded_waypoints?.some?.((waypoint) => waypoint.geocoder_status !== 'OK') ||
+      element?.status !== 'OK' ||
+      !element.distance ||
+      !element.duration
+    ) {
+      return null;
+    }
+    return {
+      distanceKm: element.distance.value / 1000,
+      durationMin: element.duration.value / 60,
+      source: 'google',
+    };
+  } catch {
+    return null;
+  }
+}
+
 function normalizeOrderDraft(input, uid) {
   if (!input || typeof input !== 'object') return null;
 
@@ -139,6 +199,11 @@ function normalizeOrderDraft(input, uid) {
   const serviceCharge = cleanAmount(input.serviceCharge);
   const total = cleanAmount(input.total);
   const commissionRatePercent = cleanAmount(input.commissionRatePercent);
+  const pickupLocation = cleanPoint(input.pickupLocation);
+  const deliveryLocation = cleanPoint(input.deliveryLocation);
+  const deliveryDistanceKm = cleanDecimal(input.deliveryDistanceKm, 500);
+  const deliveryDurationMin = cleanAmount(input.deliveryDurationMin);
+  const locationSource = input.locationSource === 'google' ? 'google' : 'estimated';
 
   const computedSubtotal = items.reduce(
     (sum, item) => sum + item.unitPrice * item.quantity,
@@ -164,6 +229,11 @@ function normalizeOrderDraft(input, uid) {
     total === null ||
     commissionRatePercent === null ||
     commissionRatePercent > 40 ||
+    !pickupLocation ||
+    !deliveryLocation ||
+    deliveryDistanceKm === null ||
+    deliveryDurationMin === null ||
+    deliveryDurationMin > 1440 ||
     subtotal !== computedSubtotal ||
     total !== subtotal + deliveryFee + serviceCharge
   ) {
@@ -179,6 +249,11 @@ function normalizeOrderDraft(input, uid) {
     deliveryAddress,
     neighbourhood,
     deliveryInstructions,
+    pickupLocation,
+    deliveryLocation,
+    deliveryDistanceKm,
+    deliveryDurationMin,
+    locationSource,
     restaurantId,
     restaurantOwnerUid,
     restaurantName,
@@ -202,10 +277,36 @@ async function applyServerPricing(order, db) {
   const settingsSnap = await db.doc('settings/marketplace').get();
   const settings = settingsSnap.exists ? settingsSnap.data() || {} : {};
 
-  const deliveryFee = cleanAmount(restaurant.deliveryFee);
+  const baseFee = cleanAmount(restaurant.deliveryFee);
   const serviceCharge = cleanAmount(settings.serviceChargeFlat);
   const commissionRatePercent = cleanAmount(settings.commissionRatePercent);
-  if (deliveryFee === null || serviceCharge === null) return null;
+  if (baseFee === null || serviceCharge === null) return null;
+
+  // The kitchen coordinate always comes from the server document. The customer
+  // coordinate is validated but cannot change the restaurant origin.
+  const pickup =
+    cleanPoint(restaurant.location) ||
+    pointForNeighbourhood(restaurant.neighbourhood) ||
+    order.pickupLocation;
+  const delivery = cleanPoint(order.deliveryLocation);
+  if (!pickup || !delivery) return null;
+
+  const route = await googleRoadRoute(pickup, delivery);
+  const quote = quoteDelivery({
+    pickup,
+    delivery,
+    baseFee,
+    roadDistanceKm: route?.distanceKm,
+    durationMin: route?.durationMin,
+    source: route ? 'google' : 'estimated',
+  });
+
+  const minTime = cleanAmount(restaurant.deliveryTimeMin) || 10;
+  const maxTime = Math.max(cleanAmount(restaurant.deliveryTimeMax) || 30, minTime);
+  const estimatedDelivery = `${Math.max(5, Math.min(minTime, Math.round(quote.durationMin * 0.9)))}–${Math.max(
+    minTime,
+    Math.max(maxTime, Math.round(quote.durationMin * 1.25)),
+  )} mins`;
 
   return {
     ...order,
@@ -213,9 +314,15 @@ async function applyServerPricing(order, db) {
     restaurantName: cleanString(restaurant.name, 140, 2) || order.restaurantName,
     restaurantAddress: cleanString(restaurant.address, 240, 0) || order.restaurantAddress,
     restaurantPhone: cleanString(restaurant.phone, 40, 5) || order.restaurantPhone,
-    deliveryFee,
+    pickupLocation: pickup,
+    deliveryLocation: delivery,
+    deliveryDistanceKm: quote.distanceKm,
+    deliveryDurationMin: quote.durationMin,
+    deliveryFee: quote.deliveryFee,
+    locationSource: quote.source,
+    estimatedDelivery,
     serviceCharge,
-    total: order.subtotal + deliveryFee + serviceCharge,
+    total: order.subtotal + quote.deliveryFee + serviceCharge,
     commissionRatePercent:
       commissionRatePercent !== null && commissionRatePercent <= 40
         ? commissionRatePercent

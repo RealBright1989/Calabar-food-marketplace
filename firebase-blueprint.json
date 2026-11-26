@@ -26,6 +26,24 @@
       },
       "required": ["uid", "email", "name", "createdAt"]
     },
+    "GeoPoint": {
+      "title": "GeoPoint",
+      "description": "Latitude and longitude pair used for restaurant and delivery locations.",
+      "type": "object",
+      "properties": {
+        "lat": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "lng": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        }
+      },
+      "required": ["lat", "lng"]
+    },
     "UserSummary": {
       "title": "UserSummary",
       "description": "Marketplace user account role and non-PII summary.",
@@ -99,7 +117,20 @@
           "maxLength": 40
         },
         "savedAddresses": {
-          "type": "array"
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "maxLength": 128 },
+              "label": { "type": "string", "maxLength": 60 },
+              "street": { "type": "string", "maxLength": 240 },
+              "neighbourhood": { "type": "string", "maxLength": 80 },
+              "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+              "lng": { "type": "number", "minimum": -180, "maximum": 180 }
+            },
+            "required": ["id", "label", "street", "neighbourhood"]
+          }
         },
         "notificationPreferences": {
           "type": "object",
@@ -158,6 +189,9 @@
         "address": {
           "type": "string",
           "maxLength": 240
+        },
+        "location": {
+          "$ref": "#/entities/GeoPoint"
         },
         "description": {
           "type": "string",
@@ -365,6 +399,25 @@
         "deliveryInstructions": {
           "type": "string",
           "maxLength": 300
+        },
+        "pickupLocation": {
+          "$ref": "#/entities/GeoPoint"
+        },
+        "deliveryLocation": {
+          "$ref": "#/entities/GeoPoint"
+        },
+        "deliveryDistanceKm": {
+          "type": "number",
+          "minimum": 0
+        },
+        "deliveryDurationMin": {
+          "type": "number",
+          "minimum": 0
+        },
+        "locationSource": {
+          "type": "string",
+          "enum": ["google", "estimated"],
+          "maxLength": 20
         },
         "restaurantId": {
           "type": "string",

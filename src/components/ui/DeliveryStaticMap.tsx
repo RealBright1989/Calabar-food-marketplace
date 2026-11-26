@@ -1,12 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MapPin, Navigation } from 'lucide-react';
+import { isValidPoint } from '../../../shared/delivery.js';
+import { GeoPoint } from '../../types/marketplace';
 
 interface DeliveryStaticMapProps {
   restaurantName: string;
   restaurantAddress: string;
   deliveryAddress: string;
   neighbourhood: string;
+  pickupLocation?: GeoPoint | null;
+  deliveryLocation?: GeoPoint | null;
   heading?: string;
+}
+
+function pointText(point: GeoPoint | null | undefined): string | null {
+  return point && isValidPoint(point) ? `${point.lat},${point.lng}` : null;
 }
 
 export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
@@ -14,6 +22,8 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
   restaurantAddress,
   deliveryAddress,
   neighbourhood,
+  pickupLocation,
+  deliveryLocation,
   heading = 'Route overview',
 }) => {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
@@ -35,8 +45,10 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
   const staticMapUrl = useMemo(() => {
     if (!apiKey || apiKey === 'MY_GOOGLE_MAPS_API_KEY') return null;
 
-    const originLocation = `${restaurantAddress}, Calabar, Cross River, Nigeria`;
-    const destLocation = `${debouncedDest}, Cross River, Nigeria`;
+    const originLocation =
+      pointText(pickupLocation) || `${restaurantAddress}, Calabar, Cross River, Nigeria`;
+    const destLocation =
+      pointText(deliveryLocation) || `${debouncedDest}, Cross River, Nigeria`;
 
     const params = new URLSearchParams({
       size: '640x320',
@@ -55,7 +67,7 @@ export const DeliveryStaticMap: React.FC<DeliveryStaticMapProps> = ({
     );
 
     return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
-  }, [apiKey, restaurantAddress, debouncedDest]);
+  }, [apiKey, restaurantAddress, debouncedDest, pickupLocation, deliveryLocation]);
 
   useEffect(() => {
     if (staticMapUrl) {

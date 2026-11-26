@@ -19,6 +19,11 @@ export type RestaurantCategory =
 
 export type PriceTier = '₦' | '₦₦' | '₦₦₦';
 
+export interface GeoPoint {
+  lat: number;
+  lng: number;
+}
+
 export type UserRole = 'customer' | 'vendor' | 'admin' | 'super-admin';
 
 export type OrderStatus =
@@ -93,6 +98,7 @@ export interface Restaurant {
   averageMealPrice: number;
   neighbourhood: string;
   address: string;
+  location?: GeoPoint;
   description: string;
   coverImage: string;
   logoText: string;
@@ -140,6 +146,11 @@ export interface Order {
   deliveryAddress: string;
   neighbourhood: string;
   deliveryInstructions?: string;
+  pickupLocation?: GeoPoint;
+  deliveryLocation?: GeoPoint;
+  deliveryDistanceKm?: number;
+  deliveryDurationMin?: number;
+  locationSource?: 'google' | 'estimated';
   restaurantId: string;
   restaurantOwnerUid?: string;
   restaurantName: string;
@@ -186,6 +197,8 @@ export interface SavedAddress {
   label: string;
   street: string;
   neighbourhood: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface NotificationPreferences {

@@ -112,6 +112,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 4800,
     neighbourhood: 'Marian Road',
     address: '42 Ndidem Usang Iso (Marian) Road, Calabar',
+    location: { lat: 4.9485, lng: 8.326 },
     description:
       'Authentic Efik home-style cooking prepared fresh daily with market-fresh ugu, waterleaf, stockfish, and river seafood.',
     coverImage: IMAGES.edikangIkong,
@@ -137,6 +138,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 4500,
     neighbourhood: 'State Housing',
     address: '14 Atekong Drive, State Housing Estate, Calabar',
+    location: { lat: 4.9375, lng: 8.33 },
     description:
       'Firewood-kissed party Jollof rice, honey-glazed grilled chicken quarters, and smoky beef suya platters delivered piping hot.',
     coverImage: IMAGES.jollofChicken,
@@ -162,6 +164,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 7200,
     neighbourhood: 'Calabar South',
     address: '9 Marina Road Waterfront, Calabar South',
+    location: { lat: 4.94, lng: 8.315 },
     description:
       'Known across Cross River for fresh croaker fisherman soup, spicy periwinkle sauces, and pounded yam made to order.',
     coverImage: IMAGES.fishermanSoup,
@@ -187,6 +190,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 6400,
     neighbourhood: 'State Housing',
     address: '22 Leopard Town Road, State Housing Estate, Calabar',
+    location: { lat: 4.9368, lng: 8.3325 },
     description:
       'Stone-baked hand-stretched pizzas including Suya Beef Special, classic pepperoni, and honey-pepper chicken wings.',
     coverImage: IMAGES.pizza,
@@ -212,6 +216,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 3600,
     neighbourhood: 'Parliamentary Extension',
     address: 'Plot 28 Parliamentary Extension, Calabar',
+    location: { lat: 4.96, lng: 8.337 },
     description:
       'Late-evening suya spot and shawarma bar serving tender yaji beef skewers, double-loaded chicken wraps, and chilled zobo.',
     coverImage: IMAGES.suyaGrills,
@@ -237,6 +242,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 1800,
     neighbourhood: 'Marian Road',
     address: '88 Ndidem Usang Iso (Marian) Road, Calabar',
+    location: { lat: 4.9478, lng: 8.3245 },
     description:
       'Cold-pressed Cross River pineapple juices, spiced hibiscus zobo bottles, house Chapman pitchers, and light snacks.',
     coverImage: IMAGES.zoboDrinks,
@@ -262,6 +268,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 2400,
     neighbourhood: 'Diamond Hill',
     address: '5 Barracks Road, Diamond Hill, Calabar',
+    location: { lat: 4.97, lng: 8.325 },
     description:
       'Flaky Nigerian meat pies, warm sugar-dusted puff-puff boxes, grilled wraps, and pineapple-spiced hibiscus zobo.',
     coverImage: IMAGES.shawarmaSnacks,
@@ -287,6 +294,7 @@ export const INITIAL_RESTAURANTS: Restaurant[] = [
     averageMealPrice: 3500,
     neighbourhood: 'Akai Effa',
     address: '19 MCC Road, Akai Effa, Calabar',
+    location: { lat: 4.955, lng: 8.31 },
     description:
       'Newly onboarded neighbourhood kitchen serving generous portions of Afang soup, coconut rice, and freshly fried dodo.',
     coverImage: IMAGES.restaurantInterior,
@@ -810,12 +818,16 @@ export const INITIAL_CUSTOMER_PROFILE: CustomerProfile = {
       label: 'Home',
       street: '18 Leopard Town Road, State Housing Estate',
       neighbourhood: 'State Housing',
+      lat: 4.9375,
+      lng: 8.33,
     },
     {
       id: 'addr-2',
       label: 'Office',
       street: '112 Ndidem Usang Iso Road, Marian',
       neighbourhood: 'Marian Road',
+      lat: 4.9485,
+      lng: 8.326,
     },
   ],
   joinedAt: '2026-08-14',

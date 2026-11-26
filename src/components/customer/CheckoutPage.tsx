@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowLeft, CreditCard, Lock, RotateCcw, ShieldCheck } from 'lucide-react';
 import {
   CALABAR_NEIGHBOURHOODS,
   INITIAL_CUSTOMER_PROFILE,
 } from '../../data/calabarData';
+import { pointForNeighbourhood, quoteDelivery } from '../../../shared/delivery.js';
+import type { DeliveryQuote } from '../../../shared/delivery';
 import {
   CartItem,
   CustomerProfile,
+  GeoPoint,
   MarketplaceSettings,
   Restaurant,
 } from '../../types/marketplace';
-import { DeliveryStaticMap } from '../ui/DeliveryStaticMap';
+import { DeliveryLocationSelection, DeliveryMapPicker } from './DeliveryMapPicker';
 import { InputField, PriceDisplay, PrimaryButton } from '../ui/Primitives';
 
 export interface CheckoutDetails {
@@ -19,6 +22,12 @@ export interface CheckoutDetails {
   deliveryAddress: string;
   neighbourhood: string;
   deliveryInstructions: string;
+  pickupLocation: GeoPoint;
+  deliveryLocation: GeoPoint;
+  deliveryDistanceKm: number;
+  deliveryDurationMin: number;
+  deliveryFee: number;
+  locationSource: 'google' | 'estimated';
 }
 
 export interface PaymentResult {
@@ -65,6 +74,9 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [locationSelection, setLocationSelection] = useState<DeliveryLocationSelection | null>(
+    null,
+  );
 
   // Sync profile fields once Firebase Auth finishes resolving customer data
   useEffect(() => {
@@ -85,8 +97,50 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
     }
   }, [customer]);
 
+  const pickupLocation = useMemo<GeoPoint>(() => {
+    if (restaurant?.location) return restaurant.location;
+    return (
+      pointForNeighbourhood(restaurant?.neighbourhood || customer.neighbourhood) ||
+      pointForNeighbourhood('State Housing')!
+    );
+  }, [restaurant?.id, restaurant?.location, restaurant?.neighbourhood, customer.neighbourhood]);
+
+  const deliveryLocation = useMemo<GeoPoint>(() => {
+    if (locationSelection) return locationSelection.location;
+    const matchingSaved = customer.savedAddresses.find(
+      (address) =>
+        address.street === deliveryAddress.trim() && address.neighbourhood === neighbourhood,
+    );
+    if (
+      matchingSaved &&
+      typeof matchingSaved.lat === 'number' &&
+      typeof matchingSaved.lng === 'number'
+    ) {
+      return { lat: matchingSaved.lat, lng: matchingSaved.lng };
+    }
+    return pointForNeighbourhood(neighbourhood) || pickupLocation;
+  }, [locationSelection, customer.savedAddresses, deliveryAddress, neighbourhood, pickupLocation]);
+
+  const deliveryQuote = useMemo<DeliveryQuote>(
+    () =>
+      locationSelection
+        ? {
+            distanceKm: locationSelection.distanceKm,
+            durationMin: locationSelection.durationMin,
+            deliveryFee: locationSelection.deliveryFee,
+            straightKm: 0,
+            source: locationSelection.source,
+          }
+        : quoteDelivery({
+            pickup: pickupLocation,
+            delivery: deliveryLocation,
+            baseFee: restaurant?.deliveryFee ?? 0,
+          }),
+    [locationSelection, pickupLocation, deliveryLocation, restaurant?.deliveryFee],
+  );
+
   const subtotal = items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-  const deliveryFee = restaurant ? restaurant.deliveryFee : 0;
+  const deliveryFee = restaurant ? deliveryQuote.deliveryFee : 0;
   const total = subtotal + deliveryFee + serviceCharge;
 
   const validate = () => {
@@ -120,6 +174,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
       deliveryAddress: deliveryAddress.trim(),
       neighbourhood,
       deliveryInstructions: deliveryInstructions.trim(),
+      pickupLocation,
+      deliveryLocation,
+      deliveryDistanceKm: deliveryQuote.distanceKm,
+      deliveryDurationMin: deliveryQuote.durationMin,
+      deliveryFee,
+      locationSource: deliveryQuote.source,
     };
 
     setIsSubmitting(true);
@@ -201,6 +261,7 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
                     onClick={() => {
                       setDeliveryAddress(saved.street);
                       setNeighbourhood(saved.neighbourhood);
+                      setLocationSelection(null);
                     }}
                     className={`px-3 py-1.5 rounded-[8px] border text-[13px] font-medium transition-colors cursor-pointer ${
                       deliveryAddress === saved.street
@@ -224,7 +285,10 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <select
                 id="checkout-neighbourhood"
                 value={neighbourhood}
-                onChange={(e) => setNeighbourhood(e.target.value)}
+                onChange={(e) => {
+                  setNeighbourhood(e.target.value);
+                  setLocationSelection(null);
+                }}
                 className="w-full h-12 px-3.5 rounded-[8px] bg-white border border-[#E7E5E4] focus:border-[#EA580C] focus:outline-none text-[15px] text-[#1C1917]"
               >
                 {CALABAR_NEIGHBOURHOODS.filter((n) => n !== 'All Calabar').map((area) => (
@@ -238,18 +302,34 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
             <InputField
               label="Street address & landmark"
               value={deliveryAddress}
-              onChange={(e) => setDeliveryAddress(e.target.value)}
+              onChange={(e) => {
+                setDeliveryAddress(e.target.value);
+                setLocationSelection(null);
+              }}
               placeholder="E.g. 18 Leopard Town Road, beside State Housing Gate"
               error={errors.deliveryAddress}
             />
 
             <div className="pt-2">
-              <DeliveryStaticMap
+              <DeliveryMapPicker
                 restaurantName={restaurant.name}
                 restaurantAddress={restaurant.address}
+                pickup={pickupLocation}
                 deliveryAddress={deliveryAddress}
                 neighbourhood={neighbourhood}
-                heading="Pickup & delivery map"
+                deliveryLocation={deliveryLocation}
+                baseFee={restaurant.deliveryFee}
+                quote={deliveryQuote}
+                onAddressChange={(address) => {
+                  setDeliveryAddress(address);
+                  setLocationSelection(null);
+                }}
+                onSelect={(selection) => {
+                  setLocationSelection(selection);
+                  setDeliveryAddress(selection.formattedAddress || deliveryAddress);
+                  setNeighbourhood(selection.neighbourhood || neighbourhood);
+                  setErrors((prev) => ({ ...prev, deliveryAddress: '' }));
+                }}
               />
             </div>
           </section>
@@ -343,6 +423,12 @@ export const CheckoutPage: React.FC<CheckoutPageProps> = ({
               <div className="flex justify-between text-[#78716C]">
                 <span>Subtotal</span>
                 <PriceDisplay amount={subtotal} className="text-[#1C1917] font-medium" />
+              </div>
+              <div className="flex justify-between text-[#78716C]">
+                <span>Delivery distance</span>
+                <span className="font-medium text-[#1C1917]">
+                  {deliveryQuote.distanceKm} km · {deliveryQuote.durationMin} mins
+                </span>
               </div>
               <div className="flex justify-between text-[#78716C]">
                 <span>Delivery fee</span>

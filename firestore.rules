@@ -67,6 +67,16 @@ service cloud.firestore {
       return (val is int || val is float) && val >= 0;
     }
 
+    function isValidGeoPoint(value) {
+      return value is map
+        && value.keys().hasAll(['lat', 'lng'])
+        && value.keys().hasOnly(['lat', 'lng'])
+        && (value.lat is int || value.lat is float)
+        && value.lat >= -90 && value.lat <= 90
+        && (value.lng is int || value.lng is float)
+        && value.lng >= -180 && value.lng <= 180;
+    }
+
     // -------------------------------------------------------------------------
     // Entity Validation Blueprints (Anti-Update-Gap)
     // -------------------------------------------------------------------------
@@ -130,7 +140,7 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'id', 'name', 'cuisine', 'categories', 'restaurantCategories',
           'priceTier', 'averageMealPrice', 'neighbourhood', 'address',
-          'description', 'coverImage', 'logoText', 'deliveryTimeMin',
+          'location', 'description', 'coverImage', 'logoText', 'deliveryTimeMin',
           'deliveryTimeMax', 'deliveryFee', 'minimumOrder', 'openingHours',
           'isOpen', 'status', 'rating', 'reviewCount', 'popularityScore',
           'ownerUid', 'createdAt', 'updatedAt'
@@ -146,6 +156,7 @@ service cloud.firestore {
         && isNonNegNum(data.averageMealPrice)
         && isValidStr(data.neighbourhood, 2, 80)
         && isValidStr(data.address, 2, 240)
+        && (!('location' in data) || isValidGeoPoint(data.location))
         && isValidStr(data.description, 2, 600)
         && isValidStr(data.coverImage, 1, 400)
         && isValidStr(data.logoText, 1, 6)
@@ -216,7 +227,9 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'id', 'orderNumber', 'customerId', 'customerName', 'customerPhone',
-          'deliveryAddress', 'neighbourhood', 'deliveryInstructions', 'restaurantId',
+          'deliveryAddress', 'neighbourhood', 'deliveryInstructions',
+          'pickupLocation', 'deliveryLocation', 'deliveryDistanceKm',
+          'deliveryDurationMin', 'locationSource', 'restaurantId',
           'restaurantOwnerUid', 'restaurantName', 'restaurantAddress',
           'restaurantPhone', 'items', 'subtotal', 'deliveryFee', 'serviceCharge',
           'total', 'status', 'paymentStatus', 'placedAt', 'estimatedDelivery',
@@ -230,6 +243,11 @@ service cloud.firestore {
         && isValidStr(data.deliveryAddress, 3, 240)
         && isValidStr(data.neighbourhood, 2, 80)
         && (!('deliveryInstructions' in data) || isValidStr(data.deliveryInstructions, 0, 300))
+        && (!('pickupLocation' in data) || isValidGeoPoint(data.pickupLocation))
+        && (!('deliveryLocation' in data) || isValidGeoPoint(data.deliveryLocation))
+        && (!('deliveryDistanceKm' in data) || isNonNegNum(data.deliveryDistanceKm))
+        && (!('deliveryDurationMin' in data) || isNonNegNum(data.deliveryDurationMin))
+        && (!('locationSource' in data) || data.locationSource in ['google', 'estimated'])
         && isValidId(data.restaurantId)
         && isValidStr(data.restaurantOwnerUid, 1, 128)
         && isValidStr(data.restaurantName, 2, 140)
@@ -510,7 +528,7 @@ service cloud.firestore {
         && (
           (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
             'name', 'cuisine', 'categories', 'restaurantCategories', 'priceTier',
-            'averageMealPrice', 'neighbourhood', 'address', 'description',
+            'averageMealPrice', 'neighbourhood', 'address', 'location', 'description',
             'coverImage', 'logoText', 'deliveryTimeMin', 'deliveryTimeMax',
             'deliveryFee', 'minimumOrder', 'openingHours', 'isOpen', 'status',
             'rating', 'reviewCount', 'popularityScore', 'ownerUid', 'updatedAt'

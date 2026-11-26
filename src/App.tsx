@@ -565,7 +565,7 @@ export default function App() {
   const buildCheckoutOrder = (details: CheckoutDetails, paymentVerified: boolean): Order => {
     const restaurant = cartRestaurant!;
     const subtotal = cartItems.reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
-    const deliveryFee = restaurant.deliveryFee;
+    const deliveryFee = details.deliveryFee;
     const serviceCharge = settings.serviceChargeFlat;
     const total = subtotal + deliveryFee + serviceCharge;
 
@@ -578,6 +578,11 @@ export default function App() {
       deliveryAddress: details.deliveryAddress,
       neighbourhood: details.neighbourhood,
       deliveryInstructions: details.deliveryInstructions || undefined,
+      pickupLocation: details.pickupLocation,
+      deliveryLocation: details.deliveryLocation,
+      deliveryDistanceKm: details.deliveryDistanceKm,
+      deliveryDurationMin: details.deliveryDurationMin,
+      locationSource: details.locationSource,
       restaurantId: restaurant.id,
       restaurantOwnerUid: restaurant.ownerUid || 'vendor-demo-owner',
       restaurantName: restaurant.name,
@@ -721,6 +726,11 @@ export default function App() {
         deliveryAddress: order.deliveryAddress,
         neighbourhood: order.neighbourhood,
         deliveryInstructions: order.deliveryInstructions,
+        pickupLocation: order.pickupLocation!,
+        deliveryLocation: order.deliveryLocation!,
+        deliveryDistanceKm: order.deliveryDistanceKm!,
+        deliveryDurationMin: order.deliveryDurationMin!,
+        locationSource: order.locationSource || 'estimated',
         restaurantId: order.restaurantId,
         restaurantOwnerUid: order.restaurantOwnerUid || 'vendor-demo-owner',
         restaurantName: order.restaurantName,

@@ -1,3 +1,5 @@
+import { GeoPoint } from '../types/marketplace';
+
 export interface PaystackOrderDraft {
   id: string;
   orderNumber: string;
@@ -6,6 +8,11 @@ export interface PaystackOrderDraft {
   deliveryAddress: string;
   neighbourhood: string;
   deliveryInstructions?: string;
+  pickupLocation: GeoPoint;
+  deliveryLocation: GeoPoint;
+  deliveryDistanceKm: number;
+  deliveryDurationMin: number;
+  locationSource: 'google' | 'estimated';
   restaurantId: string;
   restaurantOwnerUid: string;
   restaurantName: string;

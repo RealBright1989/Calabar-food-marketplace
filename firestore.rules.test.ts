@@ -195,4 +195,29 @@ export const DIRTY_DOZEN_PAYLOADS: SecurityTestCase[] = [
     expectedResult: 'PERMISSION_DENIED',
     enforcedByGate: 'match /paymentSessions/{reference} -> allow read, write: if false',
   },
+  {
+    id: 'DD-16',
+    title: 'Customer forges an out-of-range delivery coordinate',
+    actorRole: 'customer',
+    operation: 'create',
+    path: '/orders/ord-geo-invalid',
+    payload: {
+      deliveryLocation: { lat: 400, lng: 8.33 },
+      deliveryDistanceKm: 0,
+    },
+    expectedResult: 'PERMISSION_DENIED',
+    enforcedByGate: '(!(\'deliveryLocation\' in data) || isValidGeoPoint(data.deliveryLocation))',
+  },
+  {
+    id: 'DD-17',
+    title: 'Vendor moves the restaurant pickup coordinate',
+    actorRole: 'vendor',
+    operation: 'update',
+    path: '/restaurants/rest-efio-ette',
+    payload: {
+      location: { lat: 4.99, lng: 8.4 },
+    },
+    expectedResult: 'PERMISSION_DENIED',
+    enforcedByGate: "affectedKeys().hasOnly(['description', 'openingHours', 'isOpen', 'deliveryFee', 'minimumOrder', 'deliveryTimeMin', 'deliveryTimeMax', 'updatedAt'])",
+  },
 ];
