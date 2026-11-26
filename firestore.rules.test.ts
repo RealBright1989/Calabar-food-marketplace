@@ -1,13 +1,13 @@
 /**
- * Dirty Dozen Security Rules Verification Matrix
- * Documents the 12 adversarial payloads tested against firestore.rules invariants.
- * All 12 payloads are blocked by explicit rule gates and yield PERMISSION_DENIED.
+ * Security Rules Verification Matrix
+ * Documents adversarial payloads tested against firestore.rules invariants.
+ * All payloads are blocked by explicit rule gates and yield PERMISSION_DENIED.
  */
 
 export interface SecurityTestCase {
   id: string;
   title: string;
-  actorRole: 'anonymous' | 'customer' | 'vendor' | 'admin' | 'unverified-email';
+  actorRole: 'anonymous' | 'customer' | 'vendor' | 'admin' | 'super-admin' | 'unverified-email';
   operation: 'get' | 'list' | 'create' | 'update' | 'delete';
   path: string;
   payload?: Record<string, unknown>;
@@ -155,5 +155,31 @@ export const DIRTY_DOZEN_PAYLOADS: SecurityTestCase[] = [
     },
     expectedResult: 'PERMISSION_DENIED',
     enforcedByGate: 'incoming().createdAt == request.time',
+  },
+  {
+    id: 'DD-13',
+    title: 'Regular admin self-promotes to super-admin',
+    actorRole: 'admin',
+    operation: 'update',
+    path: '/users/admin_1',
+    payload: {
+      role: 'super-admin',
+    },
+    expectedResult: 'PERMISSION_DENIED',
+    enforcedByGate: 'isSuperAdmin() || incoming().role == existing().role',
+  },
+  {
+    id: 'DD-14',
+    title: 'Regular admin creates another administrator document',
+    actorRole: 'admin',
+    operation: 'create',
+    path: '/admins/admin_2',
+    payload: {
+      uid: 'admin_2',
+      email: 'admin2@calabarfood.ng',
+      name: 'Admin Two',
+    },
+    expectedResult: 'PERMISSION_DENIED',
+    enforcedByGate: 'isSuperAdmin()',
   },
 ];

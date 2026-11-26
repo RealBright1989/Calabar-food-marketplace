@@ -52,7 +52,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               'Use a verified administrator Google account. Admin access includes marketplace-wide controls that are not available in the vendor portal.',
             button: 'Sign in with Admin Account',
           }
-        : {
+        : requiredRole === 'super-admin'
+          ? {
+              title: 'Super Administrator portal sign-in',
+              description:
+                'Use the verified root administrator Google account. Super Admin access monitors every marketplace area, including administrator accounts.',
+              button: 'Sign in with Super Admin Account',
+            }
+          : {
             title: isSignedIn ? 'Your account & role' : 'Sign in to Calabar Food Marketplace',
             description:
               'Sign in with Google to place orders, track deliveries, and apply as a Calabar vendor.',
@@ -63,6 +70,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const roleMismatch = Boolean(
     isSignedIn && requiredRole && userRole && userRole !== requiredRole,
   );
+  const labelRole = (role?: string) =>
+    role === 'super-admin' ? 'Super Admin' : role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Customer';
 
   const handleGoogleClick = async () => {
     setError('');
@@ -101,9 +110,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {roleMismatch && (
           <div className="mb-4 p-3 rounded-[8px] bg-red-50 border border-red-200 text-[13px] text-[#991B1B] leading-relaxed">
-            This account is registered as <strong className="capitalize">{userRole}</strong>. Sign
-            out and use your <strong className="capitalize">{requiredRole}</strong> Google account
-            to open this portal.
+            This account is registered as{' '}
+            <strong>{labelRole(userRole)}</strong>. Sign out and use your{' '}
+            <strong>{labelRole(requiredRole)}</strong> Google account to open this portal.
           </div>
         )}
 
@@ -117,7 +126,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <p className="text-[15px] font-semibold text-[#1C1917]">{userName}</p>
               <p className="text-[13px] text-[#78716C]">{userEmail}</p>
               <p className="text-[13px] font-medium text-[#EA580C] pt-1 capitalize">
-                Active role: {userRole || 'customer'}
+                Active role: {labelRole(userRole)}
               </p>
             </div>
             <p className="text-[13px] text-[#78716C] leading-relaxed">

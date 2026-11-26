@@ -13,6 +13,7 @@ interface NavbarProps {
   onOpenAuth: () => void;
   onOpenVendorPortal: () => void;
   onOpenAdminPortal: () => void;
+  onOpenSuperAdminPortal: () => void;
 }
 
 interface NavLink {
@@ -32,6 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenVendorPortal,
   onOpenAdminPortal,
+  onOpenSuperAdminPortal,
 }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -41,6 +43,15 @@ export const Navbar: React.FC<NavbarProps> = ({
     { label: 'Track Order', view: 'order-tracking' },
     ...(userRole === 'vendor'
       ? [{ label: 'Vendor Portal', view: 'vendor-dashboard' as AppView, onSelect: onOpenVendorPortal }]
+      : []),
+    ...(userRole === 'super-admin'
+      ? [
+          {
+            label: 'Super Admin',
+            view: 'super-admin-dashboard' as AppView,
+            onSelect: onOpenSuperAdminPortal,
+          },
+        ]
       : []),
     ...(userRole === 'admin'
       ? [{ label: 'Admin', view: 'admin-dashboard' as AppView, onSelect: onOpenAdminPortal }]

@@ -183,7 +183,11 @@ export async function resolveAndEnsureUserProfile(
   const email = clampStr(firebaseUser.email || 'user@calabarfood.ng', 180);
 
   if (!userSnap.exists()) {
-    const initialRole: UserRole = isRootAdmin || hasAdminDoc ? 'admin' : 'customer';
+    const initialRole: UserRole = isRootAdmin
+      ? 'super-admin'
+      : hasAdminDoc
+        ? 'admin'
+        : 'customer';
     const joinedAt = new Date().toISOString().slice(0, 10);
 
     try {
@@ -247,10 +251,13 @@ export async function resolveAndEnsureUserProfile(
 
   const data = userSnap.data();
   const privateData = privateSnap?.exists() ? privateSnap.data() : {};
+  const storedRole = data.role as UserRole | undefined;
   const effectiveRole: UserRole =
-    isRootAdmin || hasAdminDoc
-      ? 'admin'
-      : (data.role as UserRole) || 'customer';
+    isRootAdmin || storedRole === 'super-admin'
+      ? 'super-admin'
+      : hasAdminDoc
+        ? 'admin'
+        : storedRole || 'customer';
 
   if (isRootAdmin && !hasAdminDoc) {
     try {
@@ -596,7 +603,7 @@ export function subscribeRoleOperationalData(
 ): Unsubscribe {
   const unsubs: Unsubscribe[] = [];
 
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'super-admin') {
     unsubs.push(
       onSnapshot(
         collection(db, 'orders'),
@@ -928,7 +935,14 @@ export async function adminApproveVendorApplication(
     const applicantRef = doc(db, 'users', sanitizeId(app.applicantUid));
     try {
       const snap = await getDoc(applicantRef);
-      if (snap.exists() && snap.data().role !== 'admin') {
+      const applicantRole = snap.exists()
+        ? (snap.data().role as UserRole | undefined)
+        : undefined;
+      if (
+        snap.exists() &&
+        applicantRole !== 'admin' &&
+        applicantRole !== 'super-admin'
+      ) {
         batch.update(applicantRef, {
           role: 'vendor',
           vendorRestaurantId: restId,

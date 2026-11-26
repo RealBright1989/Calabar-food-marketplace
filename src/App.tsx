@@ -13,6 +13,7 @@ import { RestaurantDetailPage } from './components/customer/RestaurantDetailPage
 import { RestaurantListingPage } from './components/customer/RestaurantListingPage';
 import { Footer } from './components/layout/Footer';
 import { Navbar } from './components/layout/Navbar';
+import { SuperAdminDashboard } from './components/superadmin/SuperAdminDashboard';
 import { ConfirmDialog, ToastContainer } from './components/ui/Primitives';
 import { VendorDashboard } from './components/vendor/VendorDashboard';
 import {
@@ -101,6 +102,7 @@ const APP_VIEWS: AppView[] = [
   'account',
   'vendor-dashboard',
   'admin-dashboard',
+  'super-admin-dashboard',
 ];
 
 function getViewFromHash(): AppView {
@@ -112,7 +114,12 @@ function getViewFromHash(): AppView {
 function getDevPreviewRole(): UserRole | null {
   if (!import.meta.env.DEV || typeof window === 'undefined') return null;
   const preview = new URLSearchParams(window.location.search).get('preview');
-  return preview === 'admin' || preview === 'vendor' || preview === 'customer' ? preview : null;
+  return preview === 'admin' ||
+    preview === 'vendor' ||
+    preview === 'super-admin' ||
+    preview === 'customer'
+    ? preview
+    : null;
 }
 
 function isStoredCartItem(value: unknown): value is CartItem {
@@ -391,7 +398,7 @@ export default function App() {
           addToast(`Signed in as ${profile.displayName || profile.email}`);
         }
 
-        if (profile.role === 'admin') {
+        if (profile.role === 'admin' || profile.role === 'super-admin') {
           await seedMarketplaceIfEmpty(user, false);
         }
 
@@ -469,7 +476,7 @@ export default function App() {
     setAuthModalOpen(true);
   };
 
-  const openPortal = (role: 'vendor' | 'admin', view: AppView) => {
+  const openPortal = (role: 'vendor' | 'admin' | 'super-admin', view: AppView) => {
     if (isPreview || effectiveRole === role) {
       setCurrentView(view);
       return;
@@ -481,6 +488,7 @@ export default function App() {
 
   const openVendorPortal = () => openPortal('vendor', 'vendor-dashboard');
   const openAdminPortal = () => openPortal('admin', 'admin-dashboard');
+  const openSuperAdminPortal = () => openPortal('super-admin', 'super-admin-dashboard');
 
   const cartRestaurant = useMemo(() => {
     if (cartItems.length === 0) return null;
@@ -764,7 +772,7 @@ export default function App() {
     const audienceFilter =
       currentView === 'vendor-dashboard'
         ? ['all', 'vendors']
-        : currentView === 'admin-dashboard'
+        : currentView === 'admin-dashboard' || currentView === 'super-admin-dashboard'
           ? []
           : ['all', 'customers'];
 
@@ -835,16 +843,19 @@ export default function App() {
         onOpenCart={() => setCartOpen(true)}
         isLoggedIn={effectiveIsSignedIn}
         customerName={
-          previewRole === 'admin'
-            ? 'Admin Preview'
-            : previewRole === 'vendor'
-              ? 'Vendor Preview'
-              : customerProfile.name
+          previewRole === 'super-admin'
+            ? 'Super Admin Preview'
+            : previewRole === 'admin'
+              ? 'Admin Preview'
+              : previewRole === 'vendor'
+                ? 'Vendor Preview'
+                : customerProfile.name
         }
         userRole={effectiveRole}
         onOpenAuth={openCustomerAuth}
         onOpenVendorPortal={openVendorPortal}
         onOpenAdminPortal={openAdminPortal}
+        onOpenSuperAdminPortal={openSuperAdminPortal}
       />
 
       {visibleAnnouncements.length > 0 && (
@@ -894,6 +905,7 @@ export default function App() {
             onOpenVendorApply={() => setVendorApplyOpen(true)}
             onOpenVendorPortal={openVendorPortal}
             onOpenAdminPortal={openAdminPortal}
+            onOpenSuperAdminPortal={openSuperAdminPortal}
           />
         )}
 
@@ -961,7 +973,11 @@ export default function App() {
           <OrderTrackingPage
             orders={orders}
             selectedOrderId={selectedOrderId}
-            canAdvanceStatus={effectiveRole === 'admin' || effectiveRole === 'vendor'}
+            canAdvanceStatus={
+              effectiveRole === 'super-admin' ||
+              effectiveRole === 'admin' ||
+              effectiveRole === 'vendor'
+            }
             onSelectOrder={setSelectedOrderId}
             onAdvanceOrderStatus={(oid, st) => void handleVendorUpdateOrderStatus(oid, st)}
             onBrowseRestaurants={() => setCurrentView('restaurants')}
@@ -1009,6 +1025,7 @@ export default function App() {
             userRole={effectiveRole}
             onGoogleSignIn={() => handleGoogleSignIn('vendor')}
             onSignOut={handleSignOut}
+            authError={portalAuthError}
             onOpenVendorApply={() => setVendorApplyOpen(true)}
             previewMode={isPreview}
           />
@@ -1022,6 +1039,7 @@ export default function App() {
             userName={isPreview ? 'Preview Account' : customerProfile.name}
             userRole={effectiveRole}
             authLoading={authLoading && !isPreview}
+            portalAuthError={portalAuthError}
             onGoogleSignIn={() => handleGoogleSignIn('admin')}
             onSignOut={
               isPreview
@@ -1486,6 +1504,37 @@ export default function App() {
             }}
           />
         )}
+
+        {currentView === 'super-admin-dashboard' && (
+          <SuperAdminDashboard
+            authReady={authReady || previewRole !== null}
+            isSignedIn={effectiveIsSignedIn}
+            userEmail={firebaseUser?.email || previewEmail}
+            userName={isPreview ? 'Super Admin Preview' : customerProfile.name}
+            userRole={effectiveRole}
+            authLoading={authLoading && !isPreview}
+            authError={portalAuthError}
+            onGoogleSignIn={() => handleGoogleSignIn('super-admin')}
+            onSignOut={
+              isPreview
+                ? async () => {
+                    window.location.href = `${window.location.pathname}#home`;
+                  }
+                : handleSignOut
+            }
+            restaurants={restaurants}
+            menuItems={menuItems}
+            customers={customers}
+            orders={orders}
+            transactions={transactions}
+            applications={applications}
+            disputes={disputes}
+            announcements={adminAnnouncements}
+            activityLogs={activityLogs}
+            settings={settings}
+            onOpenAdminPortal={openAdminPortal}
+          />
+        )}
       </main>
 
       <Footer
@@ -1493,6 +1542,7 @@ export default function App() {
         onOpenVendorApply={() => setVendorApplyOpen(true)}
         onOpenVendorPortal={openVendorPortal}
         onOpenAdminPortal={openAdminPortal}
+        onOpenSuperAdminPortal={openSuperAdminPortal}
         onShowInfoToast={(msg) => addToast(msg, 'info')}
       />
 

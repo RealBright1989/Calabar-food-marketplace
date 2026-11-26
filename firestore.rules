@@ -40,8 +40,18 @@ service cloud.firestore {
       return isVerified() && request.auth.token.email == 'brightokon444@gmail.com';
     }
 
+    function isSuperAdmin() {
+      return isRootAdmin();
+    }
+
     function isAdmin() {
-      return isRootAdmin() || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+      return isSuperAdmin() || (isVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isRegularAdmin() {
+      return isVerified()
+        && !isSuperAdmin()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
     function isValidStr(val, minLen, maxLen) {
@@ -76,7 +86,7 @@ service cloud.firestore {
         ])
         && isValidId(data.uid)
         && isValidStr(data.displayName, 1, 120)
-        && data.role in ['customer', 'vendor', 'admin']
+        && data.role in ['customer', 'vendor', 'admin', 'super-admin']
         && data.accountStatus in ['Active', 'Suspended']
         && isValidStr(data.neighbourhood, 1, 80)
         && (!('vendorRestaurantId' in data) || isValidStr(data.vendorRestaurantId, 0, 128))
@@ -396,13 +406,13 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /admins/{userId} {
       allow get: if isValidId(userId) && isVerified() && (request.auth.uid == userId || isAdmin());
-      allow list: if isRootAdmin();
-      allow create: if isValidId(userId) && isAdmin()
+      allow list: if isSuperAdmin();
+      allow create: if isValidId(userId) && isSuperAdmin()
         && isValidAdminUser(incoming())
         && incoming().uid == userId
         && incoming().createdAt == request.time;
       allow update: if false;
-      allow delete: if isValidId(userId) && isRootAdmin() && userId != request.auth.uid;
+      allow delete: if isValidId(userId) && isSuperAdmin() && userId != request.auth.uid;
     }
 
     match /users/{userId} {
@@ -414,7 +424,8 @@ service cloud.firestore {
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time
         && (
-          isAdmin()
+          isSuperAdmin()
+          || (isAdmin() && incoming().role == 'customer')
           || (
             request.auth.uid == userId
             && incoming().role == 'customer'
@@ -429,10 +440,21 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && (
-          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
+          (isSuperAdmin() && incoming().diff(existing()).affectedKeys().hasOnly([
             'displayName', 'role', 'accountStatus', 'neighbourhood',
             'vendorRestaurantId', 'totalOrders', 'totalSpent', 'updatedAt'
           ]))
+          || (
+            isRegularAdmin()
+            && (
+              incoming().role == existing().role
+              || (existing().role == 'customer' && incoming().role == 'vendor')
+            )
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'displayName', 'accountStatus', 'neighbourhood',
+              'vendorRestaurantId', 'totalOrders', 'totalSpent', 'updatedAt'
+            ])
+          )
           || (
             request.auth.uid == userId
             && incoming().role == existing().role

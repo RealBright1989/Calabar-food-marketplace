@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, MapPin, ShieldCheck, Store } from 'lucide-react';
+import { ArrowRight, Crown, MapPin, ShieldCheck, Store } from 'lucide-react';
 import {
   CALABAR_NEIGHBOURHOODS,
   FOOD_CATEGORIES,
@@ -24,6 +24,7 @@ interface HomePageProps {
   onOpenVendorApply: () => void;
   onOpenVendorPortal: () => void;
   onOpenAdminPortal: () => void;
+  onOpenSuperAdminPortal: () => void;
 }
 
 export const HomePage: React.FC<HomePageProps> = ({
@@ -41,6 +42,7 @@ export const HomePage: React.FC<HomePageProps> = ({
   onOpenVendorApply,
   onOpenVendorPortal,
   onOpenAdminPortal,
+  onOpenSuperAdminPortal,
 }) => {
   const activeRestaurants = restaurants.filter((r) => r.status === 'Active');
   const featuredRestaurants = [...activeRestaurants]
@@ -137,9 +139,9 @@ export const HomePage: React.FC<HomePageProps> = ({
               Separate portal sign-ins
             </h2>
             <p className="text-[13px] text-[#78716C] mt-1 leading-relaxed max-w-2xl">
-              Vendor and administrator portals use different verified Google accounts. Each sign-in
-              only opens its own dashboard, so marketplace-wide tools never appear in a vendor
-              account.
+              Vendor, admin, and super admin portals use different verified Google accounts. Each
+              sign-in only opens its own dashboard, so sensitive marketplace tools never appear in a
+              vendor account.
             </p>
             {import.meta.env.DEV && (
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-[#78716C]">
@@ -156,6 +158,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                 >
                   Admin
                 </a>
+                <a
+                  href="?preview=super-admin#super-admin-dashboard"
+                  className="font-semibold text-[#EA580C] underline underline-offset-2 hover:text-[#C2410C]"
+                >
+                  Super admin
+                </a>
               </div>
             )}
           </div>
@@ -167,6 +175,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             <PrimaryButton variant="outline" onClick={onOpenAdminPortal}>
               <ShieldCheck className="w-4 h-4" aria-hidden="true" />
               Admin sign in
+            </PrimaryButton>
+            <PrimaryButton variant="outline" onClick={onOpenSuperAdminPortal}>
+              <Crown className="w-4 h-4" aria-hidden="true" />
+              Super admin sign in
             </PrimaryButton>
           </div>
         </div>

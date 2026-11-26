@@ -6,6 +6,7 @@ interface FooterProps {
   onOpenVendorApply: () => void;
   onOpenVendorPortal: () => void;
   onOpenAdminPortal: () => void;
+  onOpenSuperAdminPortal: () => void;
   onShowInfoToast: (msg: string) => void;
 }
 
@@ -14,6 +15,7 @@ export const Footer: React.FC<FooterProps> = ({
   onOpenVendorApply,
   onOpenVendorPortal,
   onOpenAdminPortal,
+  onOpenSuperAdminPortal,
   onShowInfoToast,
 }) => {
   return (
@@ -91,6 +93,15 @@ export const Footer: React.FC<FooterProps> = ({
                   className="hover:text-white transition-colors cursor-pointer"
                 >
                   Admin portal sign in
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={onOpenSuperAdminPortal}
+                  className="hover:text-white transition-colors cursor-pointer"
+                >
+                  Super admin sign in
                 </button>
               </li>
             </ul>

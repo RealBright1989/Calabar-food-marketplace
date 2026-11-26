@@ -19,7 +19,7 @@ export type RestaurantCategory =
 
 export type PriceTier = '₦' | '₦₦' | '₦₦₦';
 
-export type UserRole = 'customer' | 'vendor' | 'admin';
+export type UserRole = 'customer' | 'vendor' | 'admin' | 'super-admin';
 
 export type OrderStatus =
   | 'Order placed'
@@ -41,7 +41,8 @@ export type AppView =
   | 'order-tracking'
   | 'account'
   | 'vendor-dashboard'
-  | 'admin-dashboard';
+  | 'admin-dashboard'
+  | 'super-admin-dashboard';
 
 export interface MenuSizeOption {
   id: string;

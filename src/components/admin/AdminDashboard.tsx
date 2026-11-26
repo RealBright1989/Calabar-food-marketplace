@@ -75,6 +75,7 @@ interface AdminDashboardProps {
   userName?: string;
   userRole: UserRole;
   authLoading: boolean;
+  portalAuthError?: string;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   restaurants: Restaurant[];
@@ -126,6 +127,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   userName,
   userRole,
   authLoading,
+  portalAuthError = '',
   onGoogleSignIn,
   onSignOut,
   restaurants,
@@ -245,7 +247,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }
 
-  if (!isSignedIn || userRole !== 'admin') {
+  if (!isSignedIn || (userRole !== 'admin' && userRole !== 'super-admin')) {
     return (
       <div className="max-w-[680px] mx-auto px-4 md:px-6 py-16">
         <div className="bg-white border border-[#E7E5E4] rounded-[12px] p-8 space-y-5 text-center">
@@ -276,7 +278,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {authError && <p className="text-[13px] text-[#DC2626]">{authError}</p>}
+          {(authError || portalAuthError) && (
+            <p className="text-[13px] text-[#DC2626]">{authError || portalAuthError}</p>
+          )}
 
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             {!isSignedIn ? (

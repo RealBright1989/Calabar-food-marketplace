@@ -46,6 +46,7 @@ interface VendorDashboardProps {
   userRole?: string;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
+  authError?: string;
   onOpenVendorApply: () => void;
   /** Dev-only local preview: expose every kitchen without an owner UID. */
   previewMode?: boolean;
@@ -66,6 +67,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   userRole,
   onGoogleSignIn,
   onSignOut,
+  authError = '',
   onOpenVendorApply,
   previewMode = false,
 }) => {
@@ -218,6 +220,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
               ? `You are signed in as ${userRole}. Administrator and customer accounts cannot open the vendor portal. Use the Google account linked to your approved kitchen.`
               : 'Sign in with your approved vendor Google account to manage your restaurant menu, incoming orders, and payouts. Each vendor can only access their own kitchen records.'}
           </p>
+          {authError && <p className="text-[13px] text-[#DC2626]">{authError}</p>}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <PrimaryButton onClick={() => void onGoogleSignIn()}>
               Sign in with Vendor Account
