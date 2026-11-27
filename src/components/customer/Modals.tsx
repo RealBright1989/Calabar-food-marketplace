@@ -5,7 +5,7 @@ import { getAuthErrorMessage } from '../../lib/firebase';
 import { UserRole } from '../../types/marketplace';
 import { InputField, PrimaryButton } from '../ui/Primitives';
 
-/* Auth Modal (Firebase Google Sign-In & Role Status) */
+/* Auth Modal (Firebase email/password or Google sign-in & role status) */
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
@@ -18,6 +18,8 @@ interface AuthModalProps {
   requiredRole?: UserRole;
   authError?: string;
   onGoogleSignIn: () => Promise<void>;
+  onEmailSignIn: (email: string, password: string) => Promise<void>;
+  onEmailSignUp: (email: string, password: string) => Promise<void>;
   onSignOut: () => Promise<void>;
 }
 
@@ -32,9 +34,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   requiredRole,
   authError = '',
   onGoogleSignIn,
+  onEmailSignIn,
+  onEmailSignUp,
   onSignOut,
 }) => {
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   if (!open) return null;
 
@@ -43,21 +50,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       ? {
           title: 'Vendor portal sign-in',
           description:
-            'Use the Google account linked to your approved Calabar kitchen. Vendor accounts can only manage their own restaurant.',
+            'Use the account linked to your approved Calabar kitchen. Vendor accounts can only manage their own restaurant.',
           button: 'Sign in with Vendor Account',
         }
       : requiredRole === 'admin'
         ? {
             title: 'Administrator portal sign-in',
             description:
-              'Use a verified administrator Google account. Admin access includes marketplace-wide controls that are not available in the vendor portal.',
+              'Use a verified administrator account. Admin access includes marketplace-wide controls that are not available in the vendor portal.',
             button: 'Sign in with Admin Account',
           }
         : requiredRole === 'super-admin'
           ? {
               title: 'Super Administrator portal sign-in',
               description:
-                'Use the verified root administrator Google account. Super Admin access monitors every marketplace area, including administrator accounts.',
+                'Use the verified root administrator account. Super Admin access monitors every marketplace area, including administrator accounts.',
               button: 'Sign in with Super Admin Account',
             }
           : {
@@ -68,6 +75,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           };
 
   const displayedError = authError || error;
+  const canSignUp = !requiredRole;
+  const activeMode = canSignUp ? mode : 'signin';
   const roleMismatch = Boolean(
     isSignedIn && requiredRole && userRole && userRole !== requiredRole,
   );
@@ -83,6 +92,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const handleEmailSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError('');
+    try {
+      if (activeMode === 'signup') await onEmailSignUp(email, password);
+      else await onEmailSignIn(email, password);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1C1917]/50 backdrop-blur-[2px]"
@@ -93,7 +113,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="w-full max-w-md bg-white rounded-[12px] border border-[#E7E5E4] shadow-xl p-6">
         <div className="flex items-center justify-between mb-3">
           <h2 id="auth-modal-title" className="text-[20px] font-bold text-[#1C1917]">
-            {portalCopy.title}
+            {activeMode === 'signup' ? 'Create your Calabar account' : portalCopy.title}
           </h2>
           <button
             type="button"
@@ -153,14 +173,84 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-[14px] text-[#78716C] leading-relaxed">{portalCopy.description}</p>
+            <p className="text-[14px] text-[#78716C] leading-relaxed">
+              {activeMode === 'signup'
+                ? 'Create a customer account to place orders, save receipts, and apply as a Calabar vendor.'
+                : portalCopy.description}
+            </p>
 
-            <PrimaryButton
-              fullWidth
-              size="lg"
-              loading={authLoading}
-              onClick={handleGoogleClick}
-            >
+            {canSignUp && (
+              <div className="flex gap-1 p-1 rounded-[8px] bg-[#F5F5F4] border border-[#E7E5E4]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signin');
+                    setError('');
+                  }}
+                  className={`flex-1 h-9 rounded-[6px] text-[13px] font-semibold cursor-pointer ${
+                    activeMode === 'signin'
+                      ? 'bg-white text-[#1C1917] border border-[#E7E5E4]'
+                      : 'text-[#78716C] hover:text-[#1C1917]'
+                  }`}
+                >
+                  Sign in
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signup');
+                    setError('');
+                  }}
+                  className={`flex-1 h-9 rounded-[6px] text-[13px] font-semibold cursor-pointer ${
+                    activeMode === 'signup'
+                      ? 'bg-white text-[#1C1917] border border-[#E7E5E4]'
+                      : 'text-[#78716C] hover:text-[#1C1917]'
+                  }`}
+                >
+                  Create account
+                </button>
+              </div>
+            )}
+
+            <form onSubmit={(event) => void handleEmailSubmit(event)} className="space-y-3">
+              <InputField
+                label="Email address"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="you@example.com"
+                autoComplete="email"
+                required
+                disabled={authLoading}
+              />
+              <InputField
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={activeMode === 'signup' ? 'At least 6 characters' : 'Your password'}
+                autoComplete={activeMode === 'signup' ? 'new-password' : 'current-password'}
+                minLength={activeMode === 'signup' ? 6 : undefined}
+                required
+                disabled={authLoading}
+              />
+              {activeMode === 'signup' && (
+                <p className="text-[12px] text-[#78716C] leading-relaxed">
+                  This creates a customer account. Vendor and admin roles are assigned after approval.
+                </p>
+              )}
+              <PrimaryButton fullWidth size="lg" type="submit" loading={authLoading}>
+                {activeMode === 'signup' ? 'Create my account' : 'Sign in with email'}
+              </PrimaryButton>
+            </form>
+
+            <div className="flex items-center gap-3 text-[12px] text-[#78716C]">
+              <span className="h-px flex-1 bg-[#E7E5E4]" />
+              or
+              <span className="h-px flex-1 bg-[#E7E5E4]" />
+            </div>
+
+            <PrimaryButton fullWidth size="lg" loading={authLoading} onClick={handleGoogleClick}>
               {portalCopy.button}
             </PrimaryButton>
           </div>

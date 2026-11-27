@@ -47,6 +47,7 @@ interface SuperAdminDashboardProps {
   authLoading: boolean;
   authError?: string;
   onGoogleSignIn: () => Promise<void>;
+  onOpenAuth: () => void;
   onSignOut: () => Promise<void>;
   restaurants: Restaurant[];
   menuItems: MenuItem[];
@@ -119,6 +120,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
   authLoading,
   authError = '',
   onGoogleSignIn,
+  onOpenAuth,
   onSignOut,
   restaurants,
   menuItems,
@@ -202,7 +204,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
             <p className="text-[15px] text-[#78716C] leading-relaxed">
               The Super Admin portal monitors the entire marketplace, including administrator
               accounts, payouts, audit logs, and platform rules. Only the verified root administrator
-              Google account can open it.
+              account can open it.
             </p>
           </div>
 
@@ -236,6 +238,9 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({
                 </PrimaryButton>
               </>
             )}
+            <PrimaryButton variant="outline" loading={authLoading} onClick={onOpenAuth}>
+              Use email and password
+            </PrimaryButton>
           </div>
         </div>
       </div>

@@ -1,5 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import {
+  createUserWithEmailAndPassword,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+  User,
+} from 'firebase/auth';
 import { Bell, X } from 'lucide-react';
 import { AdminDashboard } from './components/admin/AdminDashboard';
 import { AccountPage } from './components/customer/AccountPage';
@@ -455,6 +463,40 @@ export default function App() {
       }
       // Portal roles are validated in the auth listener after the Firestore
       // profile resolves. That listener closes the modal and opens the portal.
+    } catch (err) {
+      pendingPortalRole.current = null;
+      setAuthLoading(false);
+      setPortalAuthError(getAuthErrorMessage(err));
+      throw err;
+    } finally {
+      if (!requiredRole) setAuthLoading(false);
+    }
+  };
+
+  const handleEmailAuth = async (
+    mode: 'signin' | 'signup',
+    email: string,
+    password: string,
+    requiredRole?: UserRole,
+  ) => {
+    setAuthLoading(true);
+    setPortalAuthError('');
+    pendingPortalRole.current = requiredRole ?? null;
+    try {
+      const cred =
+        mode === 'signup'
+          ? await createUserWithEmailAndPassword(auth, email.trim(), password)
+          : await signInWithEmailAndPassword(auth, email.trim(), password);
+      if (!requiredRole) {
+        setAuthModalOpen(false);
+        addToast(
+          mode === 'signup'
+            ? `Account created for ${cred.user.email}`
+            : `Signed in as ${cred.user.displayName || cred.user.email}`,
+        );
+      }
+      // Portal roles are validated by the auth listener after the Firestore
+      // profile resolves, exactly like the Google sign-in flow.
     } catch (err) {
       pendingPortalRole.current = null;
       setAuthLoading(false);
@@ -1142,6 +1184,7 @@ export default function App() {
             currentUid={firebaseUser?.uid}
             userRole={effectiveRole}
             onGoogleSignIn={() => handleGoogleSignIn('vendor')}
+            onOpenAuth={() => openPortal('vendor', 'vendor-dashboard')}
             onSignOut={handleSignOut}
             authError={portalAuthError}
             onOpenVendorApply={() => setVendorApplyOpen(true)}
@@ -1159,6 +1202,7 @@ export default function App() {
             authLoading={authLoading && !isPreview}
             portalAuthError={portalAuthError}
             onGoogleSignIn={() => handleGoogleSignIn('admin')}
+            onOpenAuth={() => openPortal('admin', 'admin-dashboard')}
             onSignOut={
               isPreview
                 ? async () => {
@@ -1633,6 +1677,7 @@ export default function App() {
             authLoading={authLoading && !isPreview}
             authError={portalAuthError}
             onGoogleSignIn={() => handleGoogleSignIn('super-admin')}
+            onOpenAuth={() => openPortal('super-admin', 'super-admin-dashboard')}
             onSignOut={
               isPreview
                 ? async () => {
@@ -1713,7 +1758,7 @@ export default function App() {
         }}
       />
 
-      {/* Login / Sign up Modal (Firebase Google Auth) */}
+      {/* Login / Sign up Modal (Firebase email/password or Google Auth) */}
       <AuthModal
         open={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
@@ -1725,6 +1770,10 @@ export default function App() {
         requiredRole={authRequiredRole}
         authError={portalAuthError}
         onGoogleSignIn={() => handleGoogleSignIn(authRequiredRole)}
+        onEmailSignIn={(email, password) =>
+          handleEmailAuth('signin', email, password, authRequiredRole)
+        }
+        onEmailSignUp={(email, password) => handleEmailAuth('signup', email, password)}
         onSignOut={handleSignOut}
       />
 

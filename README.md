@@ -23,6 +23,9 @@ View your app in AI Studio: https://ai.studio/apps/ad39e5a3-c3ad-48b4-bd40-1db03
    Settings > Authorized domains, or Google sign-in will fail with `auth/unauthorized-domain`.
    The app cache-busts Firebase's project-config request so a stale allowlist is not reused after
    you add a domain.
+5. In Firebase Console > Authentication > Sign-in method, enable **Email/Password**. The sign-in
+   modal then supports email sign-in and customer account creation. New accounts are customers;
+   vendor, admin, and super-admin roles are assigned in Firestore after approval.
 
 ## Paystack gateway
 

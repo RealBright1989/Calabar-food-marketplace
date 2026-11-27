@@ -115,6 +115,29 @@ export function getAuthErrorMessage(error: unknown): string {
       'You can also open the app on localhost, which Firebase allows by default.'
     );
   }
+  if (
+    raw.includes('auth/user-not-found') ||
+    raw.includes('auth/wrong-password') ||
+    raw.includes('auth/invalid-credential') ||
+    raw.includes('INVALID_LOGIN_CREDENTIALS')
+  ) {
+    return 'Email or password is incorrect. Check your details and try again.';
+  }
+  if (raw.includes('auth/invalid-email')) {
+    return 'Enter a valid email address.';
+  }
+  if (raw.includes('auth/missing-password')) {
+    return 'Enter your password.';
+  }
+  if (raw.includes('auth/weak-password')) {
+    return 'Use a password with at least 6 characters.';
+  }
+  if (raw.includes('auth/email-already-in-use')) {
+    return 'An account already exists with that email. Sign in instead.';
+  }
+  if (raw.includes('auth/too-many-requests')) {
+    return 'Too many sign-in attempts. Wait a moment and try again.';
+  }
   if (raw.includes('auth/popup-blocked')) {
     return 'The sign-in popup was blocked. Allow popups for this site and try again.';
   }
@@ -125,7 +148,7 @@ export function getAuthErrorMessage(error: unknown): string {
     return 'Google sign-in could not reach the network. Check your connection and try again.';
   }
   if (raw.includes('auth/operation-not-allowed')) {
-    return 'Google sign-in is not enabled for this Firebase project. Enable it in Firebase Console > Authentication > Sign-in method.';
+    return 'This sign-in method is not enabled in Firebase Console > Authentication > Sign-in method.';
   }
   return message || 'Could not complete Google sign-in. Please try again.';
 }

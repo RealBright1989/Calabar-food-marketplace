@@ -78,6 +78,7 @@ interface AdminDashboardProps {
   authLoading: boolean;
   portalAuthError?: string;
   onGoogleSignIn: () => Promise<void>;
+  onOpenAuth: () => void;
   onSignOut: () => Promise<void>;
   restaurants: Restaurant[];
   menuItems: MenuItem[];
@@ -130,6 +131,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   authLoading,
   portalAuthError = '',
   onGoogleSignIn,
+  onOpenAuth,
   onSignOut,
   restaurants,
   menuItems,
@@ -324,6 +326,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </PrimaryButton>
               </>
             )}
+            <PrimaryButton variant="outline" loading={authLoading} onClick={onOpenAuth}>
+              Use email and password
+            </PrimaryButton>
           </div>
         </div>
       </div>

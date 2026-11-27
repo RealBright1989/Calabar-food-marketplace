@@ -45,6 +45,7 @@ interface VendorDashboardProps {
   currentUid?: string;
   userRole?: string;
   onGoogleSignIn: () => Promise<void>;
+  onOpenAuth: () => void;
   onSignOut: () => Promise<void>;
   authError?: string;
   onOpenVendorApply: () => void;
@@ -66,6 +67,7 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
   currentUid,
   userRole,
   onGoogleSignIn,
+  onOpenAuth,
   onSignOut,
   authError = '',
   onOpenVendorApply,
@@ -217,8 +219,8 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
           </h1>
           <p className="text-[15px] text-[#78716C] max-w-md mx-auto leading-relaxed">
             {wrongRole
-              ? `You are signed in as ${userRole}. Administrator and customer accounts cannot open the vendor portal. Use the Google account linked to your approved kitchen.`
-              : 'Sign in with your approved vendor Google account to manage your restaurant menu, incoming orders, and payouts. Each vendor can only access their own kitchen records.'}
+              ? `You are signed in as ${userRole}. Administrator and customer accounts cannot open the vendor portal. Use the account linked to your approved kitchen.`
+              : 'Sign in with your approved vendor account to manage your restaurant menu, incoming orders, and payouts. Each vendor can only access their own kitchen records.'}
           </p>
           {authError && <p className="text-[13px] text-[#DC2626]">{authError}</p>}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
@@ -230,6 +232,9 @@ export const VendorDashboard: React.FC<VendorDashboardProps> = ({
                 Sign out
               </PrimaryButton>
             )}
+            <PrimaryButton variant="outline" onClick={onOpenAuth}>
+              Use email and password
+            </PrimaryButton>
             <PrimaryButton variant="outline" onClick={onOpenVendorApply}>
               Apply to become a vendor
             </PrimaryButton>
